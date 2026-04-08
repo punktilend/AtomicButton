@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weird Al Universe — Shortcut Pro</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="chassis">
+
+    <!-- TOP RAIL -->
+    <div id="top-rail">
+      <div id="branding">
+        <span class="brand-logo">■ SHORTCUT PRO</span>
+        <span class="brand-sub">WEIRD AL UNIVERSE EDITION &nbsp;·&nbsp; 188-SLOT BROADCAST KEYBOARD</span>
+      </div>
+      <div id="system-status">
+        <div class="status-lamp" id="lamp-power" title="POWER"></div>
+        <div class="status-lamp" id="lamp-play"  title="PLAY"></div>
+        <div class="status-lamp" id="lamp-loop"  title="LOOP"></div>
+        <div class="status-lamp" id="lamp-rec"   title="REC"></div>
+      </div>
+      <div id="clock-display">
+        <span id="clock">00:00:00</span>
+        <span id="clip-timer">–:––.–</span>
+      </div>
+    </div>
+
+    <!-- MAIN BODY -->
+    <div id="main-body">
+
+      <!-- LEFT PANEL: VU METERS -->
+      <div id="left-panel">
+        <div class="panel-label">OUTPUT</div>
+        <div id="vu-meters">
+          <div class="vu-channel">
+            <div class="vu-label">L</div>
+            <div class="vu-bar"><div class="vu-segments" id="vu-left-segs"></div></div>
+          </div>
+          <div class="vu-channel">
+            <div class="vu-label">R</div>
+            <div class="vu-bar"><div class="vu-segments" id="vu-right-segs"></div></div>
+          </div>
+        </div>
+        <div id="master-vol-wrap">
+          <div class="panel-label">MASTER</div>
+          <input type="range" id="master-vol" min="0" max="100" value="85" title="Master Volume">
+          <div id="master-vol-val">85</div>
+        </div>
+      </div>
+
+      <!-- CENTER PANEL -->
+      <div id="center-panel">
+        <div id="lcd-wrap">
+          <div id="lcd">
+            <canvas id="waveform-canvas" width="490" height="96"></canvas>
+            <div id="lcd-info">
+              <span id="lcd-bank-label">BANK A</span>
+              <span id="lcd-clip-name">– NO CLIP LOADED –</span>
+              <span id="lcd-duration">0:00.0</span>
+              <span id="lcd-pos">▶ 0:00.0</span>
+            </div>
+            <div id="lcd-zoom-row">
+              <button class="zoom-btn active" data-zoom="2">2s</button>
+              <button class="zoom-btn" data-zoom="5">5s</button>
+              <button class="zoom-btn" data-zoom="10">10s</button>
+              <button class="zoom-btn" data-zoom="20">20s</button>
+              <div id="playhead-bar"><div id="playhead-line"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="transport">
+          <button class="transport-btn" id="btn-rew"   title="Rewind">⏮</button>
+          <button class="transport-btn" id="btn-play"  title="Play selected [Enter]">▶</button>
+          <button class="transport-btn" id="btn-pause" title="Pause/Cue [Ctrl+P]">⏸</button>
+          <button class="transport-btn" id="btn-stop"  title="Stop All [Ctrl+.]">■</button>
+          <button class="transport-btn" id="btn-loop"  title="Loop Toggle [Ctrl+L]">⟳</button>
+          <button class="transport-btn danger" id="btn-clear" title="Clear Selected [Ctrl+Del]">CLR</button>
+          <button class="transport-btn" id="btn-stop-all" title="Kill All [Ctrl+Shift+.]">KILL</button>
+        </div>
+
+        <div id="mode-row">
+          <button class="mode-btn active" data-mode="fire-stop">FIRE/STOP</button>
+          <button class="mode-btn" data-mode="play-end">PLAY-END</button>
+          <button class="mode-btn" data-mode="momentary">MOMENTARY</button>
+          <button class="mode-btn" data-mode="loop-fire">LOOP FIRE</button>
+          <button class="mode-btn" data-mode="restart">RESTART</button>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div id="right-panel">
+        <div class="panel-label">BANK</div>
+        <div id="bank-selector">
+          <button class="bank-btn active" data-bank="A">A</button>
+          <button class="bank-btn" data-bank="B">B</button>
+          <button class="bank-btn" data-bank="C">C</button>
+          <button class="bank-btn" data-bank="D">D</button>
+        </div>
+        <div class="panel-label" style="margin-top:14px">SLOT</div>
+        <div id="slot-controls">
+          <div class="ctrl-row">
+            <label>GAIN</label>
+            <input type="range" id="slot-gain" min="0" max="200" value="100">
+            <span id="slot-gain-val">0 dB</span>
+          </div>
+          <div class="ctrl-row">
+            <label>TRIM IN</label>
+            <input type="range" id="slot-trim-in" min="0" max="100" value="0">
+            <span id="slot-trim-in-val">0%</span>
+          </div>
+          <div class="ctrl-row">
+            <label>TRIM OUT</label>
+            <input type="range" id="slot-trim-out" min="0" max="100" value="100">
+            <span id="slot-trim-out-val">100%</span>
+          </div>
+        </div>
+        <div id="scrub-wheel-wrap">
+          <div class="panel-label">SCRUB</div>
+          <div id="scrub-wheel"><div id="scrub-tick"></div></div>
+        </div>
+        <div id="poly-count-wrap">
+          <div class="panel-label">VOICES</div>
+          <div id="poly-count">0</div>
+        </div>
+      </div>
+
+    </div><!-- /main-body -->
+
+    <!-- KEYBOARD SECTION -->
+    <div id="keyboard-section">
+      <div id="kb-bank-label">BANK A — FIRE KEYBOARD &nbsp;·&nbsp; RIGHT-CLICK ANY KEY TO ASSIGN</div>
+      <div id="keyboard-wrap">
+        <!-- Row: number row -->
+        <div class="kb-row" id="kb-row-num"></div>
+        <!-- Row: QWERTY -->
+        <div class="kb-row" id="kb-row-q"></div>
+        <!-- Row: ASDF -->
+        <div class="kb-row" id="kb-row-a"></div>
+        <!-- Row: ZXCV -->
+        <div class="kb-row" id="kb-row-z"></div>
+        <!-- Row: space -->
+        <div class="kb-row" id="kb-row-sp"></div>
+      </div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div id="status-bar">
+      <span id="status-msg">READY — Drag audio files onto keys to load. Right-click to rename/assign.</span>
+      <span id="status-mode">MODE: FIRE/STOP &nbsp;|&nbsp; <span id="status-playing">0 PLAYING</span></span>
+    </div>
+
+  </div><!-- /chassis -->
+
+  <!-- CONTEXT MENU -->
+  <div id="ctx-menu" class="hidden">
+    <div class="ctx-item" id="ctx-load">📂 Load audio file…</div>
+    <div class="ctx-item" id="ctx-rename">✏️ Rename key</div>
+    <div class="ctx-item" id="ctx-clear">🗑️ Clear key</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" id="ctx-copy">⧉ Copy to key…</div>
+    <div class="ctx-item" id="ctx-stop-this">■ Stop this key</div>
+  </div>
+
+  <input type="file" id="file-input" accept="audio/*" style="display:none">
+
+  <script src="soundboard.js"></script>
+</body>
+</html>

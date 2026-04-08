@@ -1,0 +1,80 @@
+# ── Build artefacts ───────────────────────────────────────
+build/
+out/
+cmake-build-*/
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# ── JUCE generated / FetchContent cache ──────────────────
+_deps/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# ── Visual Studio ─────────────────────────────────────────
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.aps
+*.ncb
+*.sdf
+*.opensdf
+*.opt
+*.plg
+ipch/
+
+# ── Xcode ─────────────────────────────────────────────────
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# ── JetBrains / CLion ─────────────────────────────────────
+.idea/
+*.iml
+cmake-build-debug/
+cmake-build-release/
+
+# ── macOS ─────────────────────────────────────────────────
+.DS_Store
+*.dSYM/
+
+# ── Windows ───────────────────────────────────────────────
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── Node (web prototype in repo root) ─────────────────────
+node_modules/
+.npm
+
+# ── ASIO SDK (Steinberg proprietary — must not be distributed) ──
+ASIOSDK*/
+asiosdk*/
+
+# ── Audio samples (user assets) ──────────────────────────
+samples/
+audio/
+clips/
+*.wav
+*.aiff
+*.aif
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# ── Secrets / local config ────────────────────────────────
+.env
+*.local
