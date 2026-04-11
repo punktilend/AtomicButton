@@ -10,7 +10,7 @@ public:
 
     void initialise (const juce::String&) override
     {
-        mainWindow.reset (new MainWindow ("Shortcut Pro  —  Weird Al Universe Edition",
+        mainWindow.reset (new MainWindow ("Shortcut Pro  —  Broadcast Audio Editor",
                                           new MainComponent(),
                                           *this));
     }
@@ -32,8 +32,8 @@ public:
             setUsingNativeTitleBar (true);
             setContentOwned (c, true);
             setResizable (true, true);
-            setResizeLimits (900, 700, 1400, 1100);
-            centreWithSize (960, 800);
+            setResizeLimits (1100, 820, 1800, 1280);
+            centreWithSize (1280, 900);
             setVisible (true);
         }
 

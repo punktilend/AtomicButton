@@ -43,7 +43,7 @@ bool AudioEngine::loadFile (SoundSlot& slot, const juce::File& file)
     std::unique_ptr<juce::AudioFormatReader> rdr (reader);
 
     const int64_t numSamples = rdr->lengthInSamples;
-    const int     numChannels = juce::jmin (rdr->numChannels, 2);
+    const int     numChannels = juce::jmin (static_cast<int> (rdr->numChannels), 2);
 
     auto buffer = std::make_shared<juce::AudioBuffer<float>> (numChannels, (int)numSamples);
     rdr->read (buffer.get(), 0, (int)numSamples, 0, true, true);
@@ -207,9 +207,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
                     {
                         v.active = false;
                         // Queue end notification (lock-free)
-                        int idx1, idx2;
-                        endedFifo.prepareToWrite (1, idx1, 1, idx2, 0);
-                        if (idx1 >= 0 && idx1 < (int)endedQueue.size())
+                        int idx1, size1, idx2, size2;
+                        endedFifo.prepareToWrite (1, idx1, size1, idx2, size2);
+                        if (size1 > 0 && idx1 >= 0 && idx1 < (int)endedQueue.size())
                         {
                             endedQueue[idx1] = { v.bankIndex, v.keyIndex };
                             endedFifo.finishedWrite (1);

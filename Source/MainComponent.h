@@ -6,6 +6,7 @@
 #include "VUMeterComponent.h"
 #include "WaveformDisplay.h"
 #include <array>
+#include <optional>
 
 class MainComponent : public juce::Component,
                       public juce::KeyListener,
@@ -34,6 +35,7 @@ private:
     std::array<std::array<SoundSlot, NUM_KEYS>, NUM_BANKS_TOTAL> banks;
     int  currentBank    = 0;
     int  selectedKey    = -1;
+    int  activeVoiceCount = 0;
 
     enum class PlayMode { FireStop, PlayEnd, Momentary, LoopFire, Restart };
     PlayMode playMode   = PlayMode::FireStop;
@@ -54,6 +56,11 @@ private:
     // Transport buttons
     juce::TextButton btnRew, btnPlay, btnPause, btnStop, btnLoop, btnClear, btnKillAll;
 
+    // Edit buttons
+    juce::TextButton btnMark, btnZero, btnGoTo, btnFind;
+    juce::TextButton btnCut, btnCopy, btnInsert, btnErase, btnUndo;
+    juce::TextButton btnZoomIn, btnZoomOut;
+
     // Mode buttons
     juce::TextButton modeFireStop, modePlayEnd, modeMomentary, modeLoopFire, modeRestart;
 
@@ -72,9 +79,11 @@ private:
     juce::Label   statusLabel, statusModeLabel;
 
     // ── Layout helpers ───────────────────────────────────
-    juce::Rectangle<int> topRailBounds, mainBodyBounds, leftPanelBounds,
-                          centerPanelBounds, rightPanelBounds, lcdBounds,
-                          transportBounds, modeBounds, keyboardBounds, statusBounds;
+    juce::Rectangle<int> hardwareBounds, topRailBounds, mainBodyBounds, leftPanelBounds,
+                          centerPanelBounds, rightPanelBounds, lcdBounds, lowerDeckBounds,
+                          editClusterBounds, transportClusterBounds, keyboardHeaderBounds,
+                          transportBounds, modeBounds, keyboardBounds, statusBounds,
+                          scrubWheelBounds, voicesBounds, bankBounds, slotBounds, monitorBounds;
 
     // ── Logic ────────────────────────────────────────────
     void fireKey    (int keyIndex);
@@ -93,6 +102,7 @@ private:
 
     SoundSlot& currentSlotForKey (int ki) { return banks[currentBank][ki]; }
     bool       isPlaying         (int ki) const { return engine.isVoiceActive(currentBank, ki); }
+    bool       hasSelection      () const { return selectedKey >= 0 && selectedKey < NUM_KEYS; }
 
     void initSlots();
     void initComponents();
@@ -108,6 +118,22 @@ private:
     juce::String formatTime   (double seconds) const;
     juce::String modeToString () const;
     int          countLoaded  (int bankIndex) const;
+
+    void storeUndoFromKey (int keyIndex);
+    void copySelectedSlot ();
+    void cutSelectedSlot  ();
+    void insertClipboardToSelected ();
+    void eraseSelectedSlot ();
+    void undoLastEdit ();
+    void markSelectedKey ();
+    void goToMarkedKey ();
+    void findSlot ();
+    void setPendingStatus (const juce::String& featureName);
+
+    std::optional<SoundSlot> clipboardSlot;
+    std::optional<SoundSlot> undoSlot;
+    std::optional<int>       markedKey;
+    int                      undoKey = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

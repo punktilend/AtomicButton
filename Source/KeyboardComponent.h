@@ -43,6 +43,7 @@ private:
         bool  isPlaying = false;
         bool  isSelected= false;
         bool  isDragOver= false;
+        bool  isHotKey  = false;
     };
 
     std::array<KeyCell, NUM_KEYS> cells;
@@ -52,6 +53,7 @@ private:
     int  dragOverKey  = -1;
     bool momentaryDown= false;
     int  momentaryKey = -1;
+    std::unique_ptr<juce::FileChooser> activeFileChooser;
 
     void buildLayout();
     int  keyIndexAt (int x, int y) const;
