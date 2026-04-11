@@ -18,9 +18,18 @@ FetchContent_MakeAvailable(JUCE)
 juce_add_gui_app(AtomicButton
     PRODUCT_NAME        "Shortcut Pro"
     VERSION             "1.0.0"
-    COMPANY_NAME        "Weird Al Universe"
-    BUNDLE_ID           "com.weirdal.shortcutpro"
+    COMPANY_NAME        "AtomicButton"
+    BUNDLE_ID           "com.atomicbutton.shortcutpro"
     ICON_BIG            ""
+)
+
+juce_generate_juce_header(AtomicButton)
+
+# Explicitly expose the generated JuceHeader.h to our own source files.
+# juce_generate_juce_header uses INTERFACE visibility, which doesn't cover
+# the target's own sources — add PRIVATE so our .cpp/.h files can find it.
+target_include_directories(AtomicButton PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/JuceLibraryCode"
 )
 
 target_sources(AtomicButton PRIVATE
@@ -32,10 +41,25 @@ target_sources(AtomicButton PRIVATE
     Source/MainComponent.cpp
 )
 
+if(WIN32)
+    set(ASIO_SDK_DIR "" CACHE PATH "Path to Steinberg ASIO SDK (optional)")
+    if(NOT "${ASIO_SDK_DIR}" STREQUAL "")
+        target_include_directories(AtomicButton PRIVATE "${ASIO_SDK_DIR}/common")
+        target_compile_definitions(AtomicButton PRIVATE JUCE_ASIO=1)
+        message(STATUS "ASIO enabled: ${ASIO_SDK_DIR}")
+    else()
+        # Explicitly disable ASIO so the juce_audio_devices module does not try
+        # to compile iasiodrv.h (which is absent on CI and non-ASIO machines).
+        target_compile_definitions(AtomicButton PRIVATE JUCE_ASIO=0)
+        message(STATUS "ASIO disabled (set ASIO_SDK_DIR to enable)")
+    endif()
+else()
+    target_compile_definitions(AtomicButton PRIVATE JUCE_ASIO=0)
+endif()
+
 target_compile_definitions(AtomicButton PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
-    JUCE_ASIO=1                   # Needs Steinberg ASIO SDK — see BUILD.md
     JUCE_WASAPI=1
     JUCE_DIRECTSOUND=1
     JUCE_USE_FLAC=1
@@ -60,13 +84,3 @@ target_link_libraries(AtomicButton PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags
 )
-
-# ── ASIO SDK path (Windows only) ─────────────────────────
-# Download from https://www.steinberg.net/asiosdk/
-# Set this path to wherever you extracted it:
-if(WIN32)
-    set(ASIO_SDK_DIR "" CACHE PATH "Path to Steinberg ASIO SDK")
-    if(NOT "${ASIO_SDK_DIR}" STREQUAL "")
-        target_include_directories(AtomicButton PRIVATE "${ASIO_SDK_DIR}/common")
-    endif()
-endif()
