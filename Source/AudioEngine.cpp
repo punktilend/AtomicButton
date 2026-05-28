@@ -42,8 +42,16 @@ bool AudioEngine::loadFile (SoundSlot& slot, const juce::File& file)
 
     std::unique_ptr<juce::AudioFormatReader> rdr (reader);
 
-    const int64_t numSamples = rdr->lengthInSamples;
+    const int64_t numSamples  = rdr->lengthInSamples;
     const int     numChannels = juce::jmin (static_cast<int> (rdr->numChannels), 2);
+
+    if (numSamples <= 0 || numChannels <= 0)
+        return false;
+
+    // Guard against files that would allocate more than ~2 GB
+    const int64_t maxSamples = (int64_t)2e9 / juce::jmax (1, numChannels) / 4;
+    if (numSamples > maxSamples)
+        return false;
 
     auto buffer = std::make_shared<juce::AudioBuffer<float>> (numChannels, (int)numSamples);
     rdr->read (buffer.get(), 0, (int)numSamples, 0, true, true);
@@ -76,10 +84,56 @@ bool AudioEngine::loadFile (SoundSlot& slot, const juce::File& file)
         slot.buffer        = std::move (buffer);
         slot.sampleRate    = (int)rdr->sampleRate;
         slot.duration      = (double)numSamples / rdr->sampleRate;
+        slot.sourceFile    = file;
         slot.waveformPeaks = std::move (peaks);
     }
 
     return true;
+}
+
+// ── Pause / seek ──────────────────────────────────────────
+void AudioEngine::pauseVoice (int bank, int key)
+{
+    juce::ScopedLock sl (voiceLock);
+    for (auto& v : voices)
+        if (v.active && v.bankIndex == bank && v.keyIndex == key)
+            v.paused = true;
+}
+
+void AudioEngine::resumeVoice (int bank, int key)
+{
+    juce::ScopedLock sl (voiceLock);
+    for (auto& v : voices)
+        if (v.active && v.bankIndex == bank && v.keyIndex == key)
+            v.paused = false;
+}
+
+void AudioEngine::togglePauseVoice (int bank, int key)
+{
+    juce::ScopedLock sl (voiceLock);
+    for (auto& v : voices)
+        if (v.active && v.bankIndex == bank && v.keyIndex == key)
+            v.paused = !v.paused;
+}
+
+bool AudioEngine::isVoicePaused (int bank, int key) const
+{
+    juce::ScopedLock sl (voiceLock);
+    for (const auto& v : voices)
+        if (v.active && v.bankIndex == bank && v.keyIndex == key)
+            return v.paused;
+    return false;
+}
+
+void AudioEngine::seekVoice (int bank, int key, double deltaSeconds)
+{
+    juce::ScopedLock sl (voiceLock);
+    for (auto& v : voices)
+        if (v.active && v.bankIndex == bank && v.keyIndex == key)
+        {
+            const int64_t delta = (int64_t)(deltaSeconds * currentSampleRate);
+            v.readPos = juce::jlimit (v.startSamp, v.endSamp - 1LL, v.readPos + delta);
+        }
 }
 
 // ── Voice management ──────────────────────────────────────
@@ -113,7 +167,10 @@ void AudioEngine::fireVoice (const SoundSlot& slot, bool loop)
     target->endSamp    = slot.trimOutSample();
     target->readPos    = target->startSamp;
     target->gain       = slot.gain;
-    target->loop       = loop;
+    target->loop         = loop;
+    target->fadeInSamps  = (int64_t)(slot.fadeIn  * currentSampleRate);
+    target->fadeOutSamps = (int64_t)(slot.fadeOut * currentSampleRate);
+    target->paused     = false;
     target->bankIndex  = slot.bankIndex;
     target->keyIndex   = slot.keyIndex;
     target->active     = true;
@@ -186,10 +243,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
 
         for (auto& v : voices)
         {
-            if (!v.active || v.buffer == nullptr) continue;
+            if (!v.active || v.paused || v.buffer == nullptr) continue;
 
-            const int   bufChannels = v.buffer->getNumChannels();
-            const int64_t bufLen    = v.buffer->getNumSamples();
+            const int bufChannels = v.buffer->getNumChannels();
             int samplesLeft = numSamples;
             int outOffset   = 0;
 
@@ -218,15 +274,25 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
                     }
                 }
 
-                const int toCopy = (int)juce::jmin ((int64_t)samplesLeft, available);
+                const int toCopy = (int)juce::jlimit ((int64_t)0, available, (int64_t)samplesLeft);
 
-                for (int ch = 0; ch < outCh; ++ch)
+                for (int s = 0; s < toCopy; ++s)
                 {
-                    if (outputChannelData[ch] == nullptr) continue;
-                    const int srcCh = juce::jmin (ch, bufChannels - 1);
-                    const float* src = v.buffer->getReadPointer (srcCh, (int)v.readPos);
-                    float* dst       = outputChannelData[ch] + outOffset;
-                    juce::FloatVectorOperations::addWithMultiply (dst, src, v.gain, toCopy);
+                    const int64_t elapsed   = (v.readPos + s) - v.startSamp;
+                    const int64_t remaining = v.endSamp - (v.readPos + s);
+                    float fadeGain = v.gain;
+                    if (v.fadeInSamps  > 0 && elapsed   < v.fadeInSamps)
+                        fadeGain *= (float)elapsed   / (float)v.fadeInSamps;
+                    if (v.fadeOutSamps > 0 && remaining < v.fadeOutSamps)
+                        fadeGain *= (float)remaining / (float)v.fadeOutSamps;
+
+                    for (int ch = 0; ch < outCh; ++ch)
+                    {
+                        if (outputChannelData[ch] == nullptr) continue;
+                        const int srcCh = juce::jmin (ch, bufChannels - 1);
+                        outputChannelData[ch][outOffset + s] +=
+                            v.buffer->getSample (srcCh, (int)(v.readPos + s)) * fadeGain;
+                    }
                 }
 
                 v.readPos   += toCopy;
@@ -253,7 +319,6 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
 void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
     currentSampleRate = device->getCurrentSampleRate();
-    currentBlockSize  = device->getCurrentBufferSizeSamples();
 }
 
 void AudioEngine::audioDeviceStopped()

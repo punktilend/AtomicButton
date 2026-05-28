@@ -26,6 +26,13 @@ public:
     void stopVoice  (int bankIndex, int keyIndex);
     void stopAll    ();
 
+    // ── Pause / seek ─────────────────────────────────────
+    void pauseVoice       (int bankIndex, int keyIndex);
+    void resumeVoice      (int bankIndex, int keyIndex);
+    void togglePauseVoice (int bankIndex, int keyIndex);
+    bool isVoicePaused    (int bankIndex, int keyIndex) const;
+    void seekVoice        (int bankIndex, int keyIndex, double deltaSeconds);
+
     // ── Query ─────────────────────────────────────────────
     bool isVoiceActive (int bankIndex, int keyIndex) const;
     // Returns elapsed seconds for the (first) voice on this slot
@@ -59,7 +66,6 @@ private:
     std::atomic<float> vuLevel[2];
 
     double currentSampleRate = 44100.0;
-    int    currentBlockSize  = 512;
 
     // Voices to end — queued from audio thread, fired on message thread
     struct EndedVoice { int bank; int key; };

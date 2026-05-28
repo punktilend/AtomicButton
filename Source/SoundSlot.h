@@ -4,25 +4,27 @@
 #include <memory>
 
 // ── Constants ─────────────────────────────────────────────
-static constexpr int   NUM_BANKS   = 4;
-static constexpr int   NUM_KEYS    = 47;   // trigger keys per bank
+static constexpr int   NUM_KEYS    = 50;   // trigger keys per bank (IR2: 10x5 grid)
 static constexpr int   MAX_VOICES  = 64;   // simultaneous voices
 
-// The 47 trigger keys in keyboard order (using char representation)
-// Space stored as 0x20
-static constexpr char TRIGGER_KEYS[] = {
-    '`','1','2','3','4','5','6','7','8','9','0','-','=',   // row 0 — 13
-    'q','w','e','r','t','y','u','i','o','p','[',']',       // row 1 — 12
-    'a','s','d','f','g','h','j','k','l',';','\'',          // row 2 — 11
-    'z','x','c','v','b','n','m',',','.',  '/',             // row 3 — 10
-    ' '                                                     // space  — 1
+// The 50 trigger keys in IR2 grid order (row by row, 10 per row)
+// '\0' = blank/non-triggerable position
+static constexpr char TRIGGER_KEYS[50] = {
+    // Row 1: 1-10
+    '1','2','3','4','5','6','7','8','9','0',
+    // Row 2: 11-20
+    'q','w','e','r','t','y','u','i','o','p',
+    // Row 3: 21-30
+    'a','s','d','f','g','h','j','k','l','\0',
+    // Row 4: 31-40
+    '\0','z','x','c','v','b','n','m','-','=',
+    // Row 5: 41-50
+    '\0','\0','\0','\0',' ','\0','\0',',','.','/'
 };
 
-static constexpr int TRIGGER_KEY_COUNT = sizeof(TRIGGER_KEYS) / sizeof(char);
-
-// ── Preset names [bank 0-3][key index 0-46] ──────────────
+// ── Preset names [bank 0-3][key index 0-49] ──────────────
 // Banks: A=0 Imaging, B=1 Beds/Hooks, C=2 Interview/Actuality, D=3 Specialty/FX
-static const char* PRESET_NAMES[4][47] = {
+static const char* PRESET_NAMES[4][50] = {
     // Bank A — Imaging / opens / IDs
     {
         "OPEN STING","SHOW OPEN","NEWS OPEN","SPORTS OPEN","WEATHER OPEN",
@@ -36,7 +38,7 @@ static const char* PRESET_NAMES[4][47] = {
         "AUDIENCE FX",
         "BREAK ONE","BREAK TWO","BREAK THREE","RESET SWEEP","HOUR MARK",
         "BUMPER ONE","BUMPER TWO","END TAG","FADE OUT","HARD OUT",
-        "BIG FINISH"
+        "BIG FINISH","SLOT 48","SLOT 49","SLOT 50"
     },
     // Bank B — Beds / hooks / promos
     {
@@ -51,7 +53,7 @@ static const char* PRESET_NAMES[4][47] = {
         "VOICE DROP",
         "TOPICAL","RETRO BED","WEEKEND BED","MIX SHOW","PARTY BED",
         "NIGHT BED","LATE BED","COMEDOWN","POINTER","HARD TEASE",
-        "STAB FX"
+        "STAB FX","SLOT 48","SLOT 49","SLOT 50"
     },
     // Bank C — Interview / actuality / production
     {
@@ -66,7 +68,7 @@ static const char* PRESET_NAMES[4][47] = {
         "BLOOPER",
         "ZIPPER","XYLO FX","WHOOSH","TAPE HISS","BONUS CUT",
         "NETWORK FEED","LIFE BED","MOMENT","PERIODIC","FLIPPER",
-        "CROWD FX"
+        "CROWD FX","SLOT 48","SLOT 49","SLOT 50"
     },
     // Bank D — Specialty / comedy / utility / FX
     {
@@ -81,7 +83,7 @@ static const char* PRESET_NAMES[4][47] = {
         "DEEP CUT",
         "ARCADE FX","HOLIDAY","SEARCH FX","VELVET BED","FOLK BED",
         "TRAILER","MIDNIGHT","ONE MINUTE","ENDING","HARDWARE",
-        "CHORD HIT"
+        "CHORD HIT","SLOT 48","SLOT 49","SLOT 50"
     }
 };
 
@@ -97,6 +99,7 @@ struct SoundSlot
     std::shared_ptr<juce::AudioBuffer<float>> buffer;
     int    sampleRate  = 44100;
     double duration    = 0.0;  // seconds
+    juce::File sourceFile;      // which file is loaded
 
     // Waveform thumbnail data (normalised peaks, display resolution)
     std::vector<float> waveformPeaks;
@@ -105,6 +108,8 @@ struct SoundSlot
     float gain     = 1.0f;   // linear
     float trimIn   = 0.0f;   // fraction 0-1
     float trimOut  = 1.0f;   // fraction 0-1
+    float fadeIn   = 0.0f;   // fade-in duration in seconds
+    float fadeOut  = 0.0f;   // fade-out duration in seconds
 
     bool  isLoaded() const noexcept { return buffer != nullptr; }
 
@@ -112,7 +117,7 @@ struct SoundSlot
         return isLoaded() ? static_cast<int64_t>(trimIn  * buffer->getNumSamples()) : 0;
     }
     int64_t trimOutSample() const noexcept {
-        return isLoaded() ? static_cast<int64_t>(trimOut * buffer->getNumSamples()) : buffer->getNumSamples();
+        return isLoaded() ? static_cast<int64_t>(trimOut * buffer->getNumSamples()) : 0;
     }
 };
 
@@ -125,7 +130,10 @@ struct Voice
     int64_t endSamp    = 0;
     float   gain       = 1.0f;
     bool    loop       = false;
+    int64_t fadeInSamps  = 0;   // precomputed from fadeIn * sampleRate
+    int64_t fadeOutSamps = 0;   // precomputed from fadeOut * sampleRate
     bool    active     = false;
+    bool    paused     = false;
     int     keyIndex   = -1;   // which slot owns this voice
     int     bankIndex  = -1;
 };

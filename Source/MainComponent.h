@@ -7,6 +7,9 @@
 #include "WaveformDisplay.h"
 #include <array>
 #include <optional>
+#include <set>
+#include <vector>
+#include <algorithm>
 
 class MainComponent : public juce::Component,
                       public juce::KeyListener,
@@ -31,15 +34,28 @@ private:
     AudioEngine engine;
 
     // ── State ────────────────────────────────────────────
-    static constexpr int NUM_BANKS_TOTAL = 4;
+    static constexpr int NUM_BANKS_TOTAL = 50;
     std::array<std::array<SoundSlot, NUM_KEYS>, NUM_BANKS_TOTAL> banks;
-    int  currentBank    = 0;
-    int  selectedKey    = -1;
+    int  currentBank      = 0;
+    int  selectedKey      = -1;
     int  activeVoiceCount = 0;
 
-    enum class PlayMode { FireStop, PlayEnd, Momentary, LoopFire, Restart };
-    PlayMode playMode   = PlayMode::FireStop;
-    bool     loopAll    = false;
+    enum class PlayMode { FireStop, Loop };
+    PlayMode playMode = PlayMode::FireStop;
+    bool     loopAll  = false;
+
+    // ── UI Mode ───────────────────────────────────────────────
+    enum class UIMode { Normal, BankSelect, AssignHotKey, HotList };
+    UIMode currentMode  = UIMode::Normal;
+    int    assignTargetKey = -1;   // key being assigned in AssignHotKey mode
+
+    // ── Hot List ──────────────────────────────────────────────
+    std::vector<int> hotList;       // key indices queued for playback
+    int  hotListPos    = -1;        // current play position in hot list (-1=idle)
+    bool hotListActive = false;     // true while playing from hot list
+
+    // ── Paused keys tracking ──────────────────────────────────
+    std::set<int> pausedKeys;       // key indices currently paused
 
     // ── Sub-components ───────────────────────────────────
     VUMeterComponent vuLeft  { "L" };
@@ -47,43 +63,50 @@ private:
     WaveformDisplay  waveform;
     KeyboardComponent keyboard;
 
-    // Top rail
-    juce::Label     titleLabel, subLabel, clockLabel, timerLabel;
+    // Top rail labels
+    juce::Label titleLabel, subLabel, clockLabel, timerLabel;
 
-    // LCD info bar
-    juce::Label     lcdBankLabel, lcdClipLabel, lcdDurLabel, lcdPosLabel;
+    // LCD display labels
+    juce::Label lcdBankLabel, lcdClipLabel, lcdDurLabel, lcdPosLabel;
 
-    // Transport buttons
-    juce::TextButton btnRew, btnPlay, btnPause, btnStop, btnLoop, btnClear, btnKillAll;
+    // IR3 right panel — context soft keys (below LCD) — 5 buttons like IR3
+    juce::TextButton btnSoft[5];
 
-    // Edit buttons
-    juce::TextButton btnMark, btnZero, btnGoTo, btnFind;
-    juce::TextButton btnCut, btnCopy, btnInsert, btnErase, btnUndo;
-    juce::TextButton btnZoomIn, btnZoomOut;
+    // IR3 right panel — navigation cluster
+    juce::TextButton btnNavBack, btnNavDel, btnNavFwd;      // ◄◄ DEL ►►
+    juce::TextButton btnNavLeft, btnNavUp, btnNavRight, btnNavDown;
 
-    // Mode buttons
-    juce::TextButton modeFireStop, modePlayEnd, modeMomentary, modeLoopFire, modeRestart;
+    // IR3 right panel — 3×3 control grid
+    juce::TextButton btnCancel, btnMenu, btnBankSelect;     // row 1
+    juce::TextButton btnFind, btnAssignHotKey, btnHotList;  // row 2
+    juce::TextButton btnLoop, btnPreview;                   // row 3
 
-    // Bank buttons
-    juce::TextButton bankBtns[4];
+    // IR3 right panel — ENTER (wide) + power indicator
+    juce::TextButton btnEnter;
 
-    // Slot controls
-    juce::Slider  gainSlider, trimInSlider, trimOutSlider;
-    juce::Label   gainLabel, trimInLabel, trimOutLabel;
+    // IR3 left panel bottom strip
+    juce::TextButton btnFollowOn, btnPause;
 
-    // Master volume
-    juce::Slider  masterVolSlider;
-    juce::Label   masterVolLabel;
+    // Transport row (5 buttons)
+    juce::TextButton btnStop, btnPlay, btnRecord, btnRew, btnFF;
+
+    // Rotary knobs (meter column)
+    juce::Slider knobInputL, knobInputR, knobHeadphones;
 
     // Status bar
-    juce::Label   statusLabel, statusModeLabel;
+    juce::Label statusLabel, statusModeLabel;
 
-    // ── Layout helpers ───────────────────────────────────
-    juce::Rectangle<int> hardwareBounds, topRailBounds, mainBodyBounds, leftPanelBounds,
-                          centerPanelBounds, rightPanelBounds, lcdBounds, lowerDeckBounds,
-                          editClusterBounds, transportClusterBounds, keyboardHeaderBounds,
-                          transportBounds, modeBounds, keyboardBounds, statusBounds,
-                          scrubWheelBounds, voicesBounds, bankBounds, slotBounds, monitorBounds;
+    // IR3 state
+    bool followOn = true;
+
+    // ── Layout rects ─────────────────────────────────────
+    juce::Rectangle<int> hardwareBounds, topRailBounds, mainBodyBounds,
+                          leftPanelBounds, rightPanelBounds,
+                          controlColumnBounds, meterColumnBounds,
+                          lcdBounds, softKeyRowBounds, enterRowBounds,
+                          navClusterBounds, rightColBounds,
+                          transportRowBounds, leftBottomStripBounds,
+                          statusBounds;
 
     // ── Logic ────────────────────────────────────────────
     void fireKey    (int keyIndex);
@@ -93,10 +116,10 @@ private:
 
     void selectKey  (int keyIndex);
     void switchBank (int bankIndex);
-    void setMode    (PlayMode mode);
 
     void loadFileForKey (int keyIndex, const juce::File& file);
     void clearKey       (int keyIndex);
+    void findSlot       ();
 
     void setStatus (const juce::String& msg);
 
@@ -110,30 +133,22 @@ private:
     void paintChassis   (juce::Graphics& g);
     void updateClockLabel();
     void updateTimerLabel();
-    void updateBankButtons();
-    void updateModeButtons();
-    void updateSlotControls();
     void highlightTransport();
-    juce::String gainToString (float g) const;
-    juce::String formatTime   (double seconds) const;
-    juce::String modeToString () const;
-    int          countLoaded  (int bankIndex) const;
+    juce::String formatTime  (double seconds) const;
+    int          countLoaded (int bankIndex) const;
 
-    void storeUndoFromKey (int keyIndex);
-    void copySelectedSlot ();
-    void cutSelectedSlot  ();
-    void insertClipboardToSelected ();
-    void eraseSelectedSlot ();
-    void undoLastEdit ();
-    void markSelectedKey ();
-    void goToMarkedKey ();
-    void findSlot ();
-    void setPendingStatus (const juce::String& featureName);
-
-    std::optional<SoundSlot> clipboardSlot;
-    std::optional<SoundSlot> undoSlot;
-    std::optional<int>       markedKey;
-    int                      undoKey = -1;
+    void enterNormalMode ();
+    void enterBankSelectMode ();
+    void enterAssignHotKeyMode ();
+    void enterHotListMode ();
+    void addToHotList (int keyIndex);
+    void playNextInHotList ();
+    void openFileChooserForKey (int keyIndex);
+    void openEditClip  (int keyIndex);
+    void saveProject   ();
+    void loadProject   ();
+    void updateLCD ();
+    juce::String bankName (int b) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

@@ -1,29 +1,30 @@
 #include "MainComponent.h"
+#include "EditClipComponent.h"
 
 // ── Colour palette ────────────────────────────────────────
 namespace C
 {
     static const juce::Colour ROOM        (0xff0a0a0b);
-    static const juce::Colour CHASSIS     (0xffd8dde2);
+    static const juce::Colour CHASSIS     (0xffe4e8ec);   // IR2 light gray
     static const juce::Colour CHASSIS_DRK (0xffb8c0ca);
-    static const juce::Colour PANEL       (0xffdfe4e8);
-    static const juce::Colour PANEL_BLUE  (0xff3b5b86);
+    static const juce::Colour PANEL_BLUE  (0xff3d5878);   // IR2 steel blue
+    static const juce::Colour PANEL_BLUE_DRK (0xff2d4464);
     static const juce::Colour RAIL        (0xffcfd5da);
     static const juce::Colour BEVEL       (0xfff3f5f7);
     static const juce::Colour SCREW       (0xff7e8794);
-    static const juce::Colour PANEL_HI    (0xff8e99a6);
-    static const juce::Colour LCD_FRAME   (0xff687585);
+    static const juce::Colour LCD_FRAME   (0xff2a3a4a);
     static const juce::Colour LED_GREEN   (0xff00ff44);
     static const juce::Colour LED_AMBER   (0xffffaa00);
     static const juce::Colour LED_RED     (0xffff2233);
     static const juce::Colour LCD_BG      (0xff020406);
     static const juce::Colour LCD_TEXT    (0xff35c6ff);
     static const juce::Colour LCD_DIM     (0xff6ca7c2);
-    static const juce::Colour TEXT_MAIN   (0xff25364f);
-    static const juce::Colour TEXT_DIM    (0xff617081);
-    static const juce::Colour TEXT_LABEL  (0xff7a8795);
-    static const juce::Colour BTN_FACE    (0xffe8edf2);
-    static const juce::Colour BTN_TOP     (0xfff8fafc);
+    static const juce::Colour TEXT_MAIN   (0xffe8eef4);
+    static const juce::Colour TEXT_DIM    (0xffa0b4c8);
+    static const juce::Colour BTN_FACE    (0xff4a6a8a);
+    static const juce::Colour BTN_TOP     (0xff5a7a9a);
+    static const juce::Colour BTN_LABEL   (0xffe8eef4);
+    static const juce::Colour METER_BG    (0xff2a3848);
 }
 
 static juce::Font monoFont (float size, int style = juce::Font::plain)
@@ -31,32 +32,10 @@ static juce::Font monoFont (float size, int style = juce::Font::plain)
     return juce::Font ("Courier New", size, style);
 }
 
-static juce::String hotKeyLabelForIndex (int idx)
-{
-    if (idx < 0 || idx >= TRIGGER_KEY_COUNT)
-        return {};
-
-    const char key = TRIGGER_KEYS[idx];
-    if (key == ' ')
-        return "SPACE";
-
-    return juce::String::charToString ((juce::juce_wchar) std::toupper (key));
-}
-
-static void drawPanelFrame (juce::Graphics& g, juce::Rectangle<int> r, float corner = 6.0f)
-{
-    g.setColour (juce::Colour (0xffd8dfe6));
-    g.fillRoundedRectangle (r.toFloat(), corner);
-    g.setColour (C::PANEL_HI);
-    g.drawRoundedRectangle (r.toFloat(), corner, 1.0f);
-    g.setColour (juce::Colour (0x55ffffff));
-    g.drawRoundedRectangle (r.reduced (2).toFloat(), corner - 1.5f, 1.0f);
-}
-
 // ── Construction ──────────────────────────────────────────
 MainComponent::MainComponent()
 {
-    setSize (1280, 900);
+    setSize (1280, 860);
 
     initSlots();
     engine.initialise();
@@ -65,7 +44,24 @@ MainComponent::MainComponent()
         juce::MessageManager::callAsync ([this, bank, key]()
         {
             if (bank == currentBank)
+            {
                 keyboard.setKeyPlaying (key, false);
+                pausedKeys.erase (key);
+            }
+            // Hot list follow-on
+            if (hotListActive && followOn && hotListPos >= 0
+                && hotListPos < (int)hotList.size()
+                && hotList[hotListPos] == key)
+            {
+                if (hotListPos + 1 < (int)hotList.size())
+                    playNextInHotList();
+                else
+                {
+                    hotListActive = false;
+                    hotListPos    = -1;
+                    setStatus ("HOT LIST complete");
+                }
+            }
         });
     };
 
@@ -89,18 +85,21 @@ void MainComponent::initSlots()
     for (int b = 0; b < NUM_BANKS_TOTAL; ++b)
         for (int k = 0; k < NUM_KEYS; ++k)
         {
-            auto& s    = banks[b][k];
+            auto& s     = banks[b][k];
             s.bankIndex = b;
             s.keyIndex  = k;
             s.key       = TRIGGER_KEYS[k];
-            s.name      = PRESET_NAMES[b][k];
+            if (b < 4)
+                s.name = PRESET_NAMES[b][k];
+            else
+                s.name = "SLOT " + juce::String (k + 1);
         }
 }
 
 // ── Component setup ───────────────────────────────────────
 void MainComponent::initComponents()
 {
-    // Title
+    // ── Top rail ─────────────────────────────────────────
     addAndMakeVisible (titleLabel);
     titleLabel.setFont (monoFont (13.0f, juce::Font::bold));
     titleLabel.setColour (juce::Label::textColourId, juce::Colour (0xff264d87));
@@ -108,12 +107,12 @@ void MainComponent::initComponents()
 
     addAndMakeVisible (subLabel);
     subLabel.setFont (monoFont (8.0f));
-    subLabel.setColour (juce::Label::textColourId, C::TEXT_DIM);
-    subLabel.setText ("BROADCAST AUDIO EDITOR  \xc2\xb7  188-SLOT HOT KEY DECK", juce::dontSendNotification);
+    subLabel.setColour (juce::Label::textColourId, juce::Colour (0xff617081));
+    subLabel.setText ("BROADCAST AUDIO EDITOR  \xc2\xb7  200-SLOT HOT KEY DECK", juce::dontSendNotification);
 
     addAndMakeVisible (clockLabel);
     clockLabel.setFont (monoFont (12.0f));
-    clockLabel.setColour (juce::Label::textColourId, C::TEXT_DIM);
+    clockLabel.setColour (juce::Label::textColourId, juce::Colour (0xff617081));
     clockLabel.setJustificationType (juce::Justification::right);
 
     addAndMakeVisible (timerLabel);
@@ -122,476 +121,953 @@ void MainComponent::initComponents()
     timerLabel.setJustificationType (juce::Justification::right);
     timerLabel.setText ("\xe2\x80\x93:\xe2\x80\x93\xe2\x80\x93.\xe2\x80\x93", juce::dontSendNotification);
 
-    // LCD info
+    // ── LCD info labels ───────────────────────────────────
     for (auto* l : { &lcdBankLabel, &lcdClipLabel, &lcdDurLabel, &lcdPosLabel })
     {
         addAndMakeVisible (l);
         l->setFont (monoFont (11.0f));
+        l->setColour (juce::Label::backgroundColourId, juce::Colour (0x00000000));
         l->setColour (juce::Label::textColourId, C::LCD_DIM);
     }
     lcdClipLabel.setColour (juce::Label::textColourId, C::LCD_TEXT);
-    lcdBankLabel.setText ("BANK A", juce::dontSendNotification);
-    lcdClipLabel.setText ("-- NO CLIP LOADED --", juce::dontSendNotification);
-    lcdDurLabel.setText  ("0:00.0", juce::dontSendNotification);
-    lcdPosLabel.setText  ("> 0:00.0", juce::dontSendNotification);
+    lcdClipLabel.setFont (monoFont (12.0f, juce::Font::bold));
+    lcdBankLabel.setText ("BANK A  SLOT 1", juce::dontSendNotification);
+    lcdClipLabel.setText ("-- NO CLIP --",   juce::dontSendNotification);
+    lcdDurLabel.setText  ("0:00.0",           juce::dontSendNotification);
+    lcdPosLabel.setText  ("> 0:00.0",         juce::dontSendNotification);
 
-    // VU meters
+    // ── VU meters ────────────────────────────────────────
     addAndMakeVisible (vuLeft);
     addAndMakeVisible (vuRight);
 
-    // Waveform
+    // ── Waveform ──────────────────────────────────────────
     addAndMakeVisible (waveform);
 
-    // Keyboard
+    // ── Keyboard ──────────────────────────────────────────
     addAndMakeVisible (keyboard);
     keyboard.setBank (currentBank, &banks[currentBank]);
 
-    // Transport buttons
-    auto setupTransport = [&] (juce::TextButton& btn, const juce::String& txt, const juce::String& tooltip)
+    // ── IR3 right panel buttons ───────────────────────────
+    auto setupBtn = [&] (juce::TextButton& btn, const juce::String& txt)
     {
         addAndMakeVisible (btn);
         btn.setButtonText (txt);
-        btn.setTooltip (tooltip);
         btn.setColour (juce::TextButton::buttonColourId,   C::BTN_FACE);
-        btn.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff51667c));
+        btn.setColour (juce::TextButton::buttonOnColourId, C::BTN_TOP);
+        btn.setColour (juce::TextButton::textColourOffId,  C::BTN_LABEL);
+        btn.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+        btn.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     };
-    setupTransport (btnRew,     juce::CharPointer_UTF8("\xe2\x8f\xae"), "Rewind");
-    setupTransport (btnPlay,    juce::CharPointer_UTF8("\xe2\x96\xb6"), "Play selected [Enter]");
-    setupTransport (btnPause,   juce::CharPointer_UTF8("\xe2\x8f\xb8"), "Pause/Resume [Ctrl+P]");
-    setupTransport (btnStop,    juce::CharPointer_UTF8("\xe2\x96\xa0"), "Stop selected");
-    setupTransport (btnLoop,    juce::CharPointer_UTF8("\xe2\x9f\xb3"), "Loop toggle [Ctrl+L]");
-    setupTransport (btnClear,   "CLR", "Clear selected slot [Ctrl+Del]");
-    setupTransport (btnKillAll, "KILL", "Stop all voices [Ctrl+.]");
 
-    btnClear.setColour   (juce::TextButton::textColourOffId, juce::Colour (0xffe34a62));
-    btnKillAll.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffe34a62));
-
-    auto setupEdit = [&] (juce::TextButton& btn, const juce::String& txt, const juce::String& tooltip, bool accent = false)
+    auto setupNavBtn = [&] (juce::TextButton& btn, const juce::String& txt)
     {
-        addAndMakeVisible (btn);
-        btn.setButtonText (txt);
-        btn.setTooltip (tooltip);
-        btn.setColour (juce::TextButton::buttonColourId, accent ? juce::Colour (0xffeef3f9) : C::BTN_FACE);
-        btn.setColour (juce::TextButton::textColourOffId, accent ? juce::Colour (0xff4e78b6) : C::TEXT_MAIN);
+        setupBtn (btn, txt);
+        btn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2e4a62));
     };
-    setupEdit (btnMark,   "MARK",   "Mark the currently selected hot key");
-    setupEdit (btnZero,   "ZERO",   "Return to the first hot key in the current bank");
-    setupEdit (btnGoTo,   "GO TO",  "Jump back to the marked hot key");
-    setupEdit (btnFind,   "FIND",   "Find a cut in the current bank by name");
-    setupEdit (btnCut,    "CUT",    "Copy the selected cut and clear its key");
-    setupEdit (btnCopy,   "COPY",   "Copy the selected cut");
-    setupEdit (btnInsert, "INSERT", "Paste the copied cut to the selected key");
-    setupEdit (btnErase,  "ERASE",  "Clear the selected key", true);
-    setupEdit (btnUndo,   "UNDO",   "Undo the last slot edit", true);
-    setupEdit (btnZoomIn, "ZOOM+",  "Waveform zoom in");
-    setupEdit (btnZoomOut,"ZOOM-",  "Waveform zoom out");
 
-    // Mode buttons
-    auto setupMode = [&] (juce::TextButton& btn, const juce::String& txt)
-    {
-        addAndMakeVisible (btn);
-        btn.setButtonText (txt);
-        btn.setColour (juce::TextButton::buttonColourId,  C::BTN_FACE);
-        btn.setColour (juce::TextButton::textColourOffId, C::TEXT_DIM);
-    };
-    setupMode (modeFireStop,  "FIRE/STOP");
-    setupMode (modePlayEnd,   "PLAY-END");
-    setupMode (modeMomentary, "MOMENTARY");
-    setupMode (modeLoopFire,  "LOOP FIRE");
-    setupMode (modeRestart,   "RESTART");
-    modeFireStop.setColour (juce::TextButton::buttonColourId,  juce::Colour(0xffeff6ec));
-    modeFireStop.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff238a53));
+    // Soft keys below LCD (context-sensitive, labeled F1-F5)
+    for (int i = 0; i < 5; ++i)
+        setupBtn (btnSoft[i], "F" + juce::String (i + 1));
 
-    // Bank buttons
-    for (int b = 0; b < 4; ++b)
-    {
-        addAndMakeVisible (bankBtns[b]);
-        bankBtns[b].setButtonText (juce::String::charToString ('A' + b));
-        bankBtns[b].setColour (juce::TextButton::buttonColourId,  C::BTN_FACE);
-        bankBtns[b].setColour (juce::TextButton::textColourOffId, C::TEXT_DIM);
-    }
-    bankBtns[0].setColour (juce::TextButton::buttonColourId,  juce::Colour(0xffeff6ec));
-    bankBtns[0].setColour (juce::TextButton::textColourOffId, juce::Colour (0xff238a53));
+    // Navigation cluster
+    setupNavBtn (btnNavBack,  "<<");
+    setupNavBtn (btnNavDel,   "DEL");
+    setupNavBtn (btnNavFwd,   ">>");
+    setupNavBtn (btnNavLeft,  "<");
+    setupNavBtn (btnNavUp,    "UP");
+    setupNavBtn (btnNavRight, ">");
+    setupNavBtn (btnNavDown,  "DN");
 
-    // Sliders
-    auto setupSlider = [&] (juce::Slider& s, juce::Label& lbl, const juce::String& lblTxt,
-                            double lo, double hi, double val)
+    // 3x3 right column — row 1
+    setupBtn (btnCancel,     "CANCEL");
+    setupBtn (btnMenu,       "MENU");
+    setupBtn (btnBankSelect, "BANK\nSEL");
+
+    // 3x3 right column — row 2
+    setupBtn (btnFind,         "FIND");
+    setupBtn (btnAssignHotKey, "ASSIGN HOT KEY");
+    setupBtn (btnHotList,      "HOT\nLIST");
+
+    // 3x3 right column — row 3
+    setupBtn (btnLoop,    "LOOP");
+    setupBtn (btnPreview, "PREVIEW");
+
+    // CANCEL: normal styling — only lights red dynamically when there's something to cancel
+    btnCancel.setToggleable (true);
+    btnCancel.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff6a1a1a));
+    btnCancel.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xffff8888));
+    btnLoop.setColour   (juce::TextButton::buttonOnColourId, juce::Colour (0xff1a6a3a));
+
+    // Toggle-able buttons
+    btnBankSelect.setToggleable (true);
+    btnAssignHotKey.setToggleable (true);
+    btnHotList.setToggleable (true);
+    btnLoop.setToggleable (true);
+
+    // ENTER (wide, prominent)
+    setupBtn (btnEnter, "ENTER");
+    btnEnter.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff334d66));
+
+    // Left panel bottom strip
+    setupBtn (btnFollowOn, "FOLLOW ON");
+    setupBtn (btnPause,    "PAUSE");
+    btnFollowOn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff1a6a3a));
+    btnFollowOn.setToggleable (true);
+    btnFollowOn.setToggleState (followOn, juce::dontSendNotification);
+
+    // Transport (5 buttons)
+    setupBtn (btnStop,   "STOP");
+    setupBtn (btnPlay,   "PLAY");
+    setupBtn (btnRecord, "REC");
+    setupBtn (btnRew,    "REW");
+    setupBtn (btnFF,     "FF");
+
+    btnStop.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff3a2a2a));
+    btnPlay.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff2a5a2a));
+    btnRecord.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff5a1a1a));
+    btnRew.setColour    (juce::TextButton::buttonColourId, juce::Colour (0xff2e4a62));
+    btnFF.setColour     (juce::TextButton::buttonColourId, juce::Colour (0xff2e4a62));
+
+    // ── Rotary knobs ──────────────────────────────────────
+    auto setupKnob = [&] (juce::Slider& s)
     {
         addAndMakeVisible (s);
-        addAndMakeVisible (lbl);
-        s.setRange (lo, hi, 0.01);
-        s.setValue (val, juce::dontSendNotification);
-        s.setSliderStyle (juce::Slider::LinearHorizontal);
+        s.setSliderStyle (juce::Slider::Rotary);
         s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-        s.setColour (juce::Slider::trackColourId,    juce::Colour (0xff43b7ff));
-        s.setColour (juce::Slider::backgroundColourId, juce::Colour (0xff2a2f36));
-        lbl.setFont (monoFont (8.0f));
-        lbl.setColour (juce::Label::textColourId, C::TEXT_LABEL);
-        lbl.setText (lblTxt, juce::dontSendNotification);
+        s.setRange (0.0, 1.0, 0.01);
+        s.setValue (0.75, juce::dontSendNotification);
+        s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colour (0xff43b7ff));
+        s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colour (0xff1a2838));
+        s.setColour (juce::Slider::thumbColourId,               juce::Colour (0xffe8eef4));
     };
-    setupSlider (gainSlider,    gainLabel,    "GAIN",     0.0, 2.0, 1.0);
-    setupSlider (trimInSlider,  trimInLabel,  "TRIM IN",  0.0, 1.0, 0.0);
-    setupSlider (trimOutSlider, trimOutLabel, "TRIM OUT", 0.0, 1.0, 1.0);
+    setupKnob (knobInputL);
+    setupKnob (knobInputR);
+    setupKnob (knobHeadphones);
 
-    addAndMakeVisible (masterVolSlider);
-    masterVolSlider.setRange (0.0, 1.0, 0.01);
-    masterVolSlider.setValue (0.85, juce::dontSendNotification);
-    masterVolSlider.setSliderStyle (juce::Slider::LinearVertical);
-    masterVolSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    masterVolSlider.setColour (juce::Slider::trackColourId,     juce::Colour (0xff43b7ff));
-    masterVolSlider.setColour (juce::Slider::backgroundColourId, juce::Colour (0xff2a2f36));
-
-    addAndMakeVisible (masterVolLabel);
-    masterVolLabel.setFont (monoFont (8.0f));
-    masterVolLabel.setColour (juce::Label::textColourId, C::TEXT_LABEL);
-    masterVolLabel.setText ("MASTER", juce::dontSendNotification);
-    masterVolLabel.setJustificationType (juce::Justification::centred);
-
-    // Status bar
+    // ── Status bar ────────────────────────────────────────
     addAndMakeVisible (statusLabel);
     statusLabel.setFont (monoFont (10.0f));
-    statusLabel.setColour (juce::Label::textColourId, C::TEXT_DIM);
+    statusLabel.setColour (juce::Label::textColourId, juce::Colour (0xff617081));
     statusLabel.setText ("READY -- Drop audio onto keys. Right-click for options. Ctrl+A/B/C/D switch banks.",
                           juce::dontSendNotification);
 
     addAndMakeVisible (statusModeLabel);
     statusModeLabel.setFont (monoFont (10.0f));
     statusModeLabel.setColour (juce::Label::textColourId, C::LCD_DIM);
-    statusModeLabel.setText ("MODE: FIRE/STOP | 0 PLAYING", juce::dontSendNotification);
+    statusModeLabel.setText ("BANK A  |  0 PLAYING", juce::dontSendNotification);
     statusModeLabel.setJustificationType (juce::Justification::right);
 }
 
 // ── Callbacks ─────────────────────────────────────────────
 void MainComponent::bindCallbacks()
 {
-    keyboard.onKeyFired    = [this] (int ki) { fireKey (ki);   };
+    keyboard.onEditClip    = [this] (int ki) { openEditClip (ki); };
+    keyboard.onKeyFired    = [this] (int ki) {
+        switch (currentMode)
+        {
+            case UIMode::BankSelect:
+                switchBank (ki);
+                enterNormalMode();
+                break;
+            case UIMode::AssignHotKey:
+                selectKey (ki);
+                openFileChooserForKey (ki);
+                enterNormalMode();
+                break;
+            case UIMode::HotList:
+                addToHotList (ki);
+                break;
+            case UIMode::Normal:
+            default:
+                fireKey (ki);
+                break;
+        }
+    };
     keyboard.onKeySelected = [this] (int ki) { selectKey (ki); };
     keyboard.onFileDrop    = [this] (int ki, const juce::File& f) { loadFileForKey (ki, f); };
 
-    btnRew.onClick  = [this] { engine.stopAll(); keyboard.refreshAll(); waveform.clearPlayhead(); };
-    btnPlay.onClick = [this] { if (selectedKey >= 0) startKey (selectedKey, false); };
-    btnPause.onClick= [this] {
-        auto& dm = engine.getDeviceManager();
-        if (auto* d = dm.getCurrentAudioDevice())
+    // ── Soft keys ─────────────────────────────────────────
+    btnSoft[0].onClick = [this] { setStatus ("F1"); };
+    btnSoft[1].onClick = [this] { setStatus ("F2"); };
+    btnSoft[2].onClick = [this] { setStatus ("F3"); };
+    btnSoft[3].onClick = [this] { setStatus ("F4"); };
+    btnSoft[4].onClick = [this] { setStatus ("F5"); };
+
+    // ── Navigation ─────────────────────────────────────────
+    btnNavBack.onClick  = [this] {
+        if (selectedKey >= 0) engine.seekVoice (currentBank, selectedKey, -5.0);
+    };
+    btnNavFwd.onClick   = [this] {
+        if (selectedKey >= 0) engine.seekVoice (currentBank, selectedKey, +5.0);
+    };
+    btnNavDel.onClick   = [this] { clearKey (selectedKey); };
+    btnNavLeft.onClick  = [this] {
+        if (selectedKey > 0)  selectKey (selectedKey - 1);
+    };
+    btnNavRight.onClick = [this] {
+        if (selectedKey < NUM_KEYS - 1) selectKey (selectedKey + 1);
+    };
+    btnNavUp.onClick    = [this] {
+        if (selectedKey >= 10) selectKey (selectedKey - 10);
+    };
+    btnNavDown.onClick  = [this] {
+        if (selectedKey + 10 < NUM_KEYS) selectKey (selectedKey + 10);
+    };
+
+    // ── Control grid ──────────────────────────────────────
+    btnCancel.onClick = [this] {
+        if (currentMode != UIMode::Normal)
+            enterNormalMode();
+        else if (selectedKey >= 0 && engine.isVoiceActive (currentBank, selectedKey))
+            stopKey (selectedKey);
+        else
+            stopAll();
+    };
+    btnMenu.onClick = [this] {
+        juce::PopupMenu menu;
+        menu.addItem (1, "Audio Device Settings...");
+        menu.addSeparator();
+        menu.addItem (2, "Save Project...");
+        menu.addItem (3, "Load Project...");
+        menu.addSeparator();
+        const bool hasClip = (selectedKey >= 0 && currentSlotForKey(selectedKey).isLoaded());
+        menu.addItem (4, "Edit Clip...", hasClip);
+        menu.addItem (5, "Open Clip in External Editor...", hasClip && currentSlotForKey(selectedKey).sourceFile.existsAsFile());
+        menu.addSeparator();
+        menu.addItem (6, "Clear All Banks");
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&btnMenu),
+            [this] (int r)
+            {
+                if (r == 1)
+                {
+                    juce::AudioDeviceSelectorComponent selector (
+                        engine.getDeviceManager(), 0, 0, 2, 2, false, false, true, false);
+                    selector.setSize (400, 300);
+                    juce::DialogWindow::LaunchOptions opts;
+                    opts.content.setNonOwned (&selector);
+                    opts.dialogTitle             = "Audio Device Settings";
+                    opts.dialogBackgroundColour  = juce::Colour (0xff1a2a3a);
+                    opts.useNativeTitleBar       = true;
+                    opts.escapeKeyTriggersCloseButton = true;
+                    opts.launchAsync();
+                }
+                else if (r == 2) saveProject();
+                else if (r == 3) loadProject();
+                else if (r == 4 && selectedKey >= 0) openEditClip (selectedKey);
+                else if (r == 5 && selectedKey >= 0)
+                {
+                    auto& sl = currentSlotForKey (selectedKey);
+                    if (sl.sourceFile.existsAsFile())
+                        sl.sourceFile.startAsProcess();
+                }
+                else if (r == 6)
+                {
+                    for (auto& bank : banks)
+                        for (auto& sl : bank)
+                            sl.buffer.reset();
+                    keyboard.refreshAll();
+                    updateLCD();
+                    setStatus ("All banks cleared");
+                }
+            });
+    };
+    btnBankSelect.onClick = [this] {
+        if (currentMode == UIMode::BankSelect)
+            enterNormalMode();
+        else
+            enterBankSelectMode();
+    };
+    btnFind.onClick = [this] { findSlot(); };
+    btnAssignHotKey.onClick = [this] {
+        if (currentMode == UIMode::AssignHotKey)
+            enterNormalMode();
+        else
+            enterAssignHotKeyMode();
+    };
+    btnHotList.onClick = [this] {
+        if (currentMode == UIMode::HotList)
+            enterNormalMode();
+        else
+            enterHotListMode();
+    };
+    btnLoop.onClick = [this] {
+        loopAll = !loopAll;
+        btnLoop.setToggleState (loopAll, juce::dontSendNotification);
+        highlightTransport();
+        setStatus (juce::String ("LOOP: ") + (loopAll ? "ON" : "OFF"));
+    };
+    btnPreview.onClick = [this] {
+        if (selectedKey >= 0) startKey (selectedKey, false);
+    };
+
+    // ── ENTER ─────────────────────────────────────────────
+    btnEnter.onClick = [this] {
+        switch (currentMode)
         {
-            if (d->isPlaying()) { d->stop(); btnPause.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff005522)); }
-            else                { dm.restartLastAudioDevice(); btnPause.setColour(juce::TextButton::buttonColourId, C::BTN_FACE); }
+            case UIMode::BankSelect:   enterNormalMode(); break;
+            case UIMode::AssignHotKey: enterNormalMode(); break;
+            case UIMode::HotList:
+                // Start hot list playback from beginning
+                hotListPos    = -1;
+                hotListActive = true;
+                playNextInHotList();
+                break;
+            case UIMode::Normal:
+            default:
+                if (selectedKey >= 0) fireKey (selectedKey);
+                break;
         }
     };
-    btnStop.onClick    = [this] { if (selectedKey >= 0) stopKey (selectedKey); };
-    btnKillAll.onClick = [this] { stopAll(); };
-    btnLoop.onClick    = [this] {
-        loopAll = !loopAll;
-        highlightTransport();
-        setStatus (juce::String ("LOOP ALL: ") + (loopAll ? "ON" : "OFF"));
+
+    // ── Left bottom strip ─────────────────────────────────
+    btnFollowOn.onClick = [this] {
+        followOn = !followOn;
+        btnFollowOn.setToggleState (followOn, juce::dontSendNotification);
+        setStatus (juce::String ("FOLLOW ON: ") + (followOn ? "ON" : "OFF"));
     };
-    btnClear.onClick   = [this] { if (selectedKey >= 0) clearKey (selectedKey); };
-    btnMark.onClick    = [this] { markSelectedKey(); };
-    btnZero.onClick    = [this] { selectKey (0); setStatus ("ZERO -- returned to first hot key in current bank"); };
-    btnGoTo.onClick    = [this] { goToMarkedKey(); };
-    btnFind.onClick    = [this] { findSlot(); };
-    btnCut.onClick     = [this] { cutSelectedSlot(); };
-    btnCopy.onClick    = [this] { copySelectedSlot(); };
-    btnInsert.onClick  = [this] { insertClipboardToSelected(); };
-    btnErase.onClick   = [this] { eraseSelectedSlot(); };
-    btnUndo.onClick    = [this] { undoLastEdit(); };
-    btnZoomIn.onClick  = [this] { setPendingStatus ("Waveform zoom in"); };
-    btnZoomOut.onClick = [this] { setPendingStatus ("Waveform zoom out"); };
-
-    // Bank buttons
-    for (int b = 0; b < 4; ++b)
-        bankBtns[b].onClick = [this, b] { switchBank (b); };
-
-    // Mode buttons
-    modeFireStop.onClick  = [this] { setMode (PlayMode::FireStop);  };
-    modePlayEnd.onClick   = [this] { setMode (PlayMode::PlayEnd);   };
-    modeMomentary.onClick = [this] { setMode (PlayMode::Momentary); };
-    modeLoopFire.onClick  = [this] { setMode (PlayMode::LoopFire);  };
-    modeRestart.onClick   = [this] { setMode (PlayMode::Restart);   };
-
-    // Gain slider
-    gainSlider.onValueChange = [this] {
+    btnPause.onClick = [this] {
         if (selectedKey < 0) return;
-        currentSlotForKey(selectedKey).gain = (float)gainSlider.getValue();
+        if (engine.isVoiceActive (currentBank, selectedKey))
+        {
+            engine.togglePauseVoice (currentBank, selectedKey);
+            const bool nowPaused = engine.isVoicePaused (currentBank, selectedKey);
+            if (nowPaused)
+            {
+                pausedKeys.insert (selectedKey);
+                btnPause.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff884422));
+                setStatus ("PAUSED -- slot " + juce::String (selectedKey + 1));
+            }
+            else
+            {
+                pausedKeys.erase (selectedKey);
+                btnPause.setColour (juce::TextButton::buttonColourId, C::BTN_FACE);
+                setStatus ("RESUME -- slot " + juce::String (selectedKey + 1));
+            }
+        }
     };
 
-    // Trim in
-    trimInSlider.onValueChange = [this] {
-        if (selectedKey < 0) return;
-        auto& s = currentSlotForKey(selectedKey);
-        s.trimIn = (float)trimInSlider.getValue();
-        waveform.setSlot (&s);
+    // ── Transport ─────────────────────────────────────────
+    btnStop.onClick = [this] {
+        if (hotListActive)
+        {
+            hotListActive = false;
+            hotListPos    = -1;
+            stopAll();
+            setStatus ("HOT LIST stopped");
+        }
+        else
+            stopAll();
     };
-
-    // Trim out
-    trimOutSlider.onValueChange = [this] {
-        if (selectedKey < 0) return;
-        auto& s = currentSlotForKey(selectedKey);
-        s.trimOut = (float)trimOutSlider.getValue();
-        waveform.setSlot (&s);
+    btnPlay.onClick = [this] {
+        if (hotListActive)
+        {
+            // Manual step through hot list
+            if (!followOn) playNextInHotList();
+        }
+        else if (selectedKey >= 0)
+        {
+            if (engine.isVoicePaused (currentBank, selectedKey))
+            {
+                engine.resumeVoice (currentBank, selectedKey);
+                pausedKeys.erase (selectedKey);
+                btnPause.setColour (juce::TextButton::buttonColourId, C::BTN_FACE);
+                setStatus ("RESUME -- slot " + juce::String (selectedKey + 1));
+            }
+            else
+                startKey (selectedKey, loopAll);
+        }
     };
-
-    // Master vol
-    masterVolSlider.onValueChange = [this] {
-        // Set on the audio device manager via gain node (handled in engine)
-        // For now: scale all voices via master gain concept
-        // The engine itself doesn't have a master gain; apply to device output
-        // A simple approach: store and scale in engine. We'll use a rough workaround
-        // by adjusting the output volume directly (platform-specific).
-        // For now, note that per-slot gains handle individual levels.
+    btnRecord.onClick = [this] {
+        setStatus ("REC -- connect audio input and press PLAY");
     };
+    btnRew.onClick = [this] {
+        if (selectedKey >= 0) engine.seekVoice (currentBank, selectedKey, -5.0);
+        setStatus ("REW -5s");
+    };
+    btnFF.onClick = [this] {
+        if (selectedKey >= 0) engine.seekVoice (currentBank, selectedKey, +5.0);
+        setStatus ("FF +5s");
+    };
+}
 
-    // Audio device settings button
-    // (Can be triggered from menu: Options > Audio Device Settings)
+// ── Mode / Hot List helpers ───────────────────────────────
+juce::String MainComponent::bankName (int b) const
+{
+    if (b < 0 || b >= NUM_BANKS_TOTAL) return "??";
+    // Banks 0-25 → A-Z, banks 26-49 → AA-AX
+    if (b < 26) return juce::String::charToString ((juce::juce_wchar)('A' + b));
+    return juce::String ("A") + juce::String::charToString ((juce::juce_wchar)('A' + (b - 26)));
+}
+
+void MainComponent::enterNormalMode()
+{
+    currentMode = UIMode::Normal;
+    assignTargetKey = -1;
+    btnBankSelect.setToggleState  (false, juce::dontSendNotification);
+    btnAssignHotKey.setToggleState(false, juce::dontSendNotification);
+    btnHotList.setToggleState     (false, juce::dontSendNotification);
+    keyboard.setUIMode (0);
+    setStatus ("READY");
+    updateLCD();
+}
+
+void MainComponent::enterBankSelectMode()
+{
+    currentMode = UIMode::BankSelect;
+    btnBankSelect.setToggleState (true, juce::dontSendNotification);
+    keyboard.setUIMode (1);
+    setStatus ("BANK SEL -- press hot key 1-50 to select bank");
+    updateLCD();
+}
+
+void MainComponent::enterAssignHotKeyMode()
+{
+    currentMode = UIMode::AssignHotKey;
+    btnAssignHotKey.setToggleState (true, juce::dontSendNotification);
+    keyboard.setUIMode (2);
+    setStatus ("ASSIGN HOT KEY -- press a hot key to assign a clip");
+    updateLCD();
+}
+
+void MainComponent::enterHotListMode()
+{
+    currentMode = UIMode::HotList;
+    btnHotList.setToggleState (true, juce::dontSendNotification);
+    keyboard.setUIMode (3);
+    if (hotList.empty())
+        setStatus ("HOT LIST -- press hot keys to add clips, PLAY to start");
+    else
+        setStatus ("HOT LIST -- " + juce::String ((int)hotList.size()) + " clips queued");
+    updateLCD();
+}
+
+void MainComponent::addToHotList (int keyIndex)
+{
+    auto it = std::find (hotList.begin(), hotList.end(), keyIndex);
+    if (it != hotList.end())
+    {
+        hotList.erase (it);
+        setStatus ("HOT LIST -- removed slot " + juce::String (keyIndex + 1));
+    }
+    else
+    {
+        if (currentSlotForKey (keyIndex).isLoaded())
+        {
+            hotList.push_back (keyIndex);
+            setStatus ("HOT LIST -- added slot " + juce::String (keyIndex + 1)
+                       + " (" + juce::String ((int)hotList.size()) + " total)");
+        }
+        else
+            setStatus ("HOT LIST -- slot " + juce::String (keyIndex + 1) + " is empty");
+    }
+    keyboard.setHotList (hotList);
+    updateLCD();
+}
+
+void MainComponent::playNextInHotList()
+{
+    if (hotList.empty()) { hotListActive = false; return; }
+    hotListPos = juce::jlimit (0, (int)hotList.size() - 1, hotListPos + 1);
+    if (hotListPos >= (int)hotList.size()) { hotListActive = false; hotListPos = -1; return; }
+    const int ki = hotList[hotListPos];
+    startKey (ki, false);
+    setStatus ("HOT LIST [" + juce::String (hotListPos + 1) + "/" + juce::String ((int)hotList.size()) + "]  "
+               + currentSlotForKey (ki).name);
+}
+
+void MainComponent::openEditClip (int keyIndex)
+{
+    auto& sl = currentSlotForKey (keyIndex);
+    if (!sl.isLoaded()) return;
+
+    auto* editor = new EditClipComponent (sl, engine, [this, keyIndex]()
+    {
+        keyboard.refreshKey (keyIndex);
+        updateLCD();
+        setStatus ("EDIT APPLIED -- " + currentSlotForKey(keyIndex).name);
+    });
+
+    juce::DialogWindow::LaunchOptions opts;
+    opts.content.setOwned (editor);
+    opts.dialogTitle             = "EDIT CLIP";
+    opts.dialogBackgroundColour  = juce::Colour (0xff101820);
+    opts.useNativeTitleBar       = false;
+    opts.escapeKeyTriggersCloseButton = true;
+    opts.launchAsync();
+}
+
+void MainComponent::saveProject()
+{
+    auto chooser = std::make_shared<juce::FileChooser> (
+        "Save Shortcut Pro Project",
+        juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
+        "*.scp");
+
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode
+                              | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+        [this, chooser] (const juce::FileChooser& fc)
+        {
+            auto f = fc.getResult();
+            if (!f.hasFileExtension ("scp"))
+                f = f.withFileExtension ("scp");
+            if (f.getFullPathName().isEmpty()) return;
+
+            juce::XmlElement root ("ShortcutPro");
+            root.setAttribute ("version", 1);
+
+            for (int b = 0; b < NUM_BANKS_TOTAL; ++b)
+            {
+                bool bankHasContent = false;
+                for (int k = 0; k < NUM_KEYS; ++k)
+                    if (banks[b][k].isLoaded()) { bankHasContent = true; break; }
+                if (!bankHasContent) continue;
+
+                auto* bankEl = root.createNewChildElement ("Bank");
+                bankEl->setAttribute ("index", b);
+                bankEl->setAttribute ("name",  bankName (b));
+
+                for (int k = 0; k < NUM_KEYS; ++k)
+                {
+                    const auto& sl = banks[b][k];
+                    if (!sl.isLoaded()) continue;
+                    auto* slotEl = bankEl->createNewChildElement ("Slot");
+                    slotEl->setAttribute ("index",   k);
+                    slotEl->setAttribute ("name",    sl.name);
+                    slotEl->setAttribute ("file",    sl.sourceFile.getFullPathName());
+                    slotEl->setAttribute ("trimIn",  (double)sl.trimIn);
+                    slotEl->setAttribute ("trimOut", (double)sl.trimOut);
+                    slotEl->setAttribute ("fadeIn",  (double)sl.fadeIn);
+                    slotEl->setAttribute ("fadeOut", (double)sl.fadeOut);
+                    slotEl->setAttribute ("gain",    (double)sl.gain);
+                }
+            }
+
+            if (f.replaceWithText (root.toString()))
+                setStatus ("PROJECT SAVED -- " + f.getFileName());
+            else
+                setStatus ("ERROR -- could not save project");
+        });
+}
+
+void MainComponent::loadProject()
+{
+    auto chooser = std::make_shared<juce::FileChooser> (
+        "Load Shortcut Pro Project",
+        juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
+        "*.scp");
+
+    chooser->launchAsync (juce::FileBrowserComponent::openMode
+                              | juce::FileBrowserComponent::canSelectFiles,
+        [this, chooser] (const juce::FileChooser& fc)
+        {
+            const auto f = fc.getResult();
+            if (!f.existsAsFile()) return;
+
+            auto xml = juce::XmlDocument::parse (f);
+            if (xml == nullptr || xml->getTagName() != "ShortcutPro")
+            {
+                setStatus ("ERROR -- not a valid Shortcut Pro project file");
+                return;
+            }
+
+            engine.stopAll();
+            // Clear banks
+            for (auto& bank : banks)
+                for (auto& sl : bank)
+                    sl.buffer.reset();
+
+            int loaded = 0;
+            for (auto* bankEl : xml->getChildIterator())
+            {
+                if (bankEl->getTagName() != "Bank") continue;
+                const int b = bankEl->getIntAttribute ("index", -1);
+                if (b < 0 || b >= NUM_BANKS_TOTAL) continue;
+
+                for (auto* slotEl : bankEl->getChildIterator())
+                {
+                    if (slotEl->getTagName() != "Slot") continue;
+                    const int k = slotEl->getIntAttribute ("index", -1);
+                    if (k < 0 || k >= NUM_KEYS) continue;
+
+                    juce::File audioFile (slotEl->getStringAttribute ("file"));
+                    if (!audioFile.existsAsFile()) continue;
+
+                    auto& sl = banks[b][k];
+                    if (engine.loadFile (sl, audioFile))
+                    {
+                        sl.name    = slotEl->getStringAttribute ("name", sl.name);
+                        sl.trimIn  = (float)slotEl->getDoubleAttribute ("trimIn",  0.0);
+                        sl.trimOut = (float)slotEl->getDoubleAttribute ("trimOut", 1.0);
+                        sl.fadeIn  = (float)slotEl->getDoubleAttribute ("fadeIn",  0.0);
+                        sl.fadeOut = (float)slotEl->getDoubleAttribute ("fadeOut", 0.0);
+                        sl.gain    = (float)slotEl->getDoubleAttribute ("gain",    1.0);
+                        ++loaded;
+                    }
+                }
+            }
+
+            switchBank (currentBank);
+            updateLCD();
+            setStatus ("PROJECT LOADED -- " + juce::String (loaded) + " clips restored from " + f.getFileName());
+        });
+}
+
+void MainComponent::openFileChooserForKey (int keyIndex)
+{
+    auto chooser = std::make_shared<juce::FileChooser> (
+        "Assign clip to hot key " + juce::String (keyIndex + 1),
+        juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3");
+
+    chooser->launchAsync (juce::FileBrowserComponent::openMode
+                              | juce::FileBrowserComponent::canSelectFiles,
+        [this, keyIndex, chooser] (const juce::FileChooser& fc)
+        {
+            const auto f = fc.getResult();
+            if (f.existsAsFile())
+                loadFileForKey (keyIndex, f);
+        });
+}
+
+void MainComponent::updateLCD()
+{
+    // Bank label
+    lcdBankLabel.setText ("BANK " + bankName (currentBank)
+                          + "  SLOT " + (selectedKey >= 0 ? juce::String (selectedKey + 1) : juce::String ("-")),
+                          juce::dontSendNotification);
+
+    // Mode indicator in bank label
+    juce::String modeStr;
+    switch (currentMode)
+    {
+        case UIMode::BankSelect:    modeStr = "  [BANK SEL]";   break;
+        case UIMode::AssignHotKey:  modeStr = "  [ASSIGN]";     break;
+        case UIMode::HotList:       modeStr = "  [HOT LIST]";   break;
+        default: break;
+    }
+    if (modeStr.isNotEmpty())
+        lcdBankLabel.setText (lcdBankLabel.getText() + modeStr, juce::dontSendNotification);
+
+    // Clip info
+    if (selectedKey >= 0 && selectedKey < NUM_KEYS)
+    {
+        const auto& slot = currentSlotForKey (selectedKey);
+        lcdClipLabel.setText (slot.isLoaded() ? slot.name.toUpperCase() : "-- NO CLIP --",
+                               juce::dontSendNotification);
+        lcdDurLabel.setText  (slot.isLoaded() ? formatTime (slot.duration) : "0:00.0",
+                               juce::dontSendNotification);
+    }
+
+    // Hot list info
+    if (!hotList.empty() && currentMode == UIMode::HotList)
+    {
+        juce::String q = "QUEUE: ";
+        for (int i = 0; i < juce::jmin ((int)hotList.size(), 8); ++i)
+            q += juce::String (hotList[i] + 1) + " ";
+        if ((int)hotList.size() > 8) q += "...";
+        lcdClipLabel.setText (q, juce::dontSendNotification);
+    }
 }
 
 // ── Layout ────────────────────────────────────────────────
 void MainComponent::resized()
 {
-    auto available = getLocalBounds().reduced (18, 16);
-    const int deckW = juce::jmin (available.getWidth(), 1280);
-    const int deckH = juce::jmin (available.getHeight(), 930);
+    auto available = getLocalBounds().reduced (14, 12);
+    const int deckW = juce::jmin (available.getWidth(),  1280);
+    const int deckH = juce::jmin (available.getHeight(), 870);
     hardwareBounds = available.withSizeKeepingCentre (deckW, deckH);
 
     auto deck = hardwareBounds;
-    topRailBounds = deck.removeFromTop (46);
-    statusBounds = deck.removeFromBottom (28);
+    topRailBounds  = deck.removeFromTop (42);
+    statusBounds   = deck.removeFromBottom (26);
     mainBodyBounds = deck;
 
-    leftPanelBounds = mainBodyBounds.removeFromLeft (772);
-    auto monitorZone = mainBodyBounds.removeFromLeft (70);
-    auto controlZone = mainBodyBounds;
-    rightPanelBounds = controlZone.removeFromRight (168);
-    centerPanelBounds = controlZone;
-    monitorBounds = monitorZone.reduced (6, 10);
-    keyboardHeaderBounds = {};
-    keyboardBounds = leftPanelBounds.reduced (14, 16);
-    bankBounds = rightPanelBounds.reduced (10, 12).removeFromTop (96);
-    slotBounds = rightPanelBounds.reduced (10, 12);
-    slotBounds.removeFromTop (110);
+    // Split 62% left (hot keys) / 38% right (controls + meters)
+    const int leftW  = (int)(mainBodyBounds.getWidth() * 0.62f);
+    leftPanelBounds  = mainBodyBounds.removeFromLeft (leftW);
+    rightPanelBounds = mainBodyBounds;
 
-    titleLabel.setBounds (topRailBounds.getX() + 20, topRailBounds.getY() + 7, 360, 16);
-    subLabel.setBounds   (topRailBounds.getX() + 20, topRailBounds.getY() + 24, 470, 12);
-    clockLabel.setBounds (topRailBounds.getRight() - 186, topRailBounds.getY() + 6, 170, 14);
-    timerLabel.setBounds (topRailBounds.getRight() - 186, topRailBounds.getY() + 20, 170, 18);
+    // Right panel: far-right 80px = meter column; rest = control column
+    const int meterColW = 80;
+    meterColumnBounds   = rightPanelBounds.removeFromRight (meterColW);
+    controlColumnBounds = rightPanelBounds;
 
-    const auto meterInner = monitorZone.reduced (8, 20);
-    const int vuY = meterInner.getY() + 40;
-    const int vuH = 240;
-    vuLeft.setBounds  (meterInner.getX() + 4, vuY, 12, vuH);
-    vuRight.setBounds (meterInner.getX() + 22, vuY, 12, vuH);
-    masterVolSlider.setBounds (meterInner.getX() + 42, vuY + 32, 16, 180);
-    masterVolLabel.setBounds  (meterInner.getX() + 24, vuY + 220, 34, 12);
+    // ── Control column layout (IR3) — proportional fill ──
+    auto ctrl = controlColumnBounds.reduced (8, 6);
+    const int ctrlH = ctrl.getHeight();
 
-    auto centerInner = centerPanelBounds.reduced (12, 12);
-    lcdBounds = centerInner.removeFromTop (juce::jlimit (220, 270, centerInner.getHeight() / 3));
-    auto lcdInner = lcdBounds.reduced (12, 12);
-    auto lcdInfoBounds = lcdInner.removeFromBottom (18);
-    waveform.setBounds (lcdInner);
-    lcdBankLabel.setBounds (lcdInfoBounds.getX(), lcdInfoBounds.getY(), 80, lcdInfoBounds.getHeight());
-    lcdDurLabel.setBounds  (lcdInfoBounds.getRight() - 92, lcdInfoBounds.getY(), 44, lcdInfoBounds.getHeight());
-    lcdPosLabel.setBounds  (lcdInfoBounds.getRight() - 44, lcdInfoBounds.getY(), 44, lcdInfoBounds.getHeight());
-    lcdClipLabel.setBounds (lcdInfoBounds.getX() + 80, lcdInfoBounds.getY(), lcdInfoBounds.getWidth() - 176, lcdInfoBounds.getHeight());
+    // Fixed-height sections
+    const int softH      = 28;
+    const int enterH     = 36;
+    const int transportH = 48;
+    const int gapsTotal  = 6 + 8 + 8 + 8 + 10;  // between each section
 
-    centerInner.removeFromTop (12);
-    lowerDeckBounds = centerInner.removeFromTop (344);
-    auto towerInner = lowerDeckBounds.reduced (10, 8);
-    editClusterBounds = towerInner.removeFromTop (108);
-    towerInner.removeFromTop (8);
-    juce::Rectangle<int> scrubBand = towerInner.removeFromTop (86);
-    towerInner.removeFromTop (8);
-    transportClusterBounds = towerInner.removeFromTop (96);
-    towerInner.removeFromTop (8);
-    modeBounds = towerInner.removeFromTop (28);
-    scrubWheelBounds = { scrubBand.getCentreX() - 34, scrubBand.getCentreY() - 34, 68, 68 };
+    // Distribute remaining height between LCD and mid-button block
+    const int flexH  = ctrlH - softH - enterH - transportH - gapsTotal;
+    const int lcdH   = (flexH * 44) / 100;   // LCD gets 44% of flex
+    const int midH   = flexH - lcdH;          // mid buttons get the rest
 
-    auto editInner = editClusterBounds.reduced (12, 26);
-    const int editW = 76;
-    const int editGap = 6;
-    int row1X = editInner.getCentreX() - ((editW * 4 + editGap * 3) / 2);
-    int row2X = row1X;
-    btnMark.setBounds   (row1X, editInner.getY(), editW, 24); row1X += editW + editGap;
-    btnZero.setBounds   (row1X, editInner.getY(), editW, 24); row1X += editW + editGap;
-    btnGoTo.setBounds   (row1X, editInner.getY(), editW, 24); row1X += editW + editGap;
-    btnFind.setBounds   (row1X, editInner.getY(), editW, 24);
-    btnCut.setBounds    (row2X, editInner.getY() + 30, editW, 24); row2X += editW + editGap;
-    btnCopy.setBounds   (row2X, editInner.getY() + 30, editW, 24); row2X += editW + editGap;
-    btnInsert.setBounds (row2X, editInner.getY() + 30, editW, 24); row2X += editW + editGap;
-    btnErase.setBounds  (row2X, editInner.getY() + 30, editW, 24);
-    int row3X = editInner.getCentreX() - ((editW * 3 + editGap * 2) / 2);
-    btnUndo.setBounds    (row3X, editInner.getY() + 60, editW, 24); row3X += editW + editGap;
-    btnZoomIn.setBounds  (row3X, editInner.getY() + 60, editW, 24); row3X += editW + editGap;
-    btnZoomOut.setBounds (row3X, editInner.getY() + 60, editW, 24);
+    // 1) LCD touchscreen
+    lcdBounds = ctrl.removeFromTop (lcdH);
+    ctrl.removeFromTop (6);
 
-    transportBounds = transportClusterBounds.withTrimmedTop (26).removeFromTop (76);
-    const int tW = 64;
-    const int tH = 32;
-    const int tGap = 8;
-    const int topRowY = transportBounds.getY();
-    const int botRowY = transportBounds.getY() + tH + 10;
-    const int topWidth = 4 * tW + 3 * tGap;
-    const int botWidth = 3 * tW + 2 * tGap;
-    int topX = transportBounds.getCentreX() - topWidth / 2;
-    int botX = transportBounds.getCentreX() - botWidth / 2;
-    btnRew.setBounds     (topX, topRowY, tW, tH); topX += tW + tGap;
-    btnPlay.setBounds    (topX, topRowY, tW, tH); topX += tW + tGap;
-    btnPause.setBounds   (topX, topRowY, tW, tH); topX += tW + tGap;
-    btnStop.setBounds    (topX, topRowY, tW, tH);
-    btnLoop.setBounds    (botX, botRowY, tW, tH); botX += tW + tGap;
-    btnClear.setBounds   (botX, botRowY, tW, tH); botX += tW + tGap;
-    btnKillAll.setBounds (botX, botRowY, tW, tH);
+    // 2) 4 soft keys below LCD
+    softKeyRowBounds = ctrl.removeFromTop (softH);
+    ctrl.removeFromTop (8);
 
-    const int mW = 76;
-    const int mH = 24;
-    const int mGap = 6;
-    const int modeTotal = mW * 5 + mGap * 4;
-    int modeX = modeBounds.getCentreX() - modeTotal / 2;
-    const int modeY = modeBounds.getY();
-    modeFireStop.setBounds  (modeX, modeY, mW, mH); modeX += mW + mGap;
-    modePlayEnd.setBounds   (modeX, modeY, mW, mH); modeX += mW + mGap;
-    modeMomentary.setBounds (modeX, modeY, mW, mH); modeX += mW + mGap;
-    modeLoopFire.setBounds  (modeX, modeY, mW, mH); modeX += mW + mGap;
-    modeRestart.setBounds   (modeX, modeY, mW, mH);
+    // 3) ENTER row
+    enterRowBounds = ctrl.removeFromTop (enterH);
+    ctrl.removeFromTop (8);
 
-    auto rightInner = rightPanelBounds.reduced (10, 12);
-    int ry = rightInner.getY() + 12;
-    for (int b = 0; b < 4; ++b)
+    // 4) Nav cluster (left ~42%) + right column, fills midH
+    const int navColW = (ctrl.getWidth() * 42) / 100;
+    auto midRow = ctrl.removeFromTop (midH);
+    navClusterBounds = midRow.removeFromLeft (navColW);
+    midRow.removeFromLeft (8);
+    rightColBounds = midRow;
+    ctrl.removeFromTop (10);
+
+    // 5) Transport row
+    transportRowBounds = ctrl.removeFromTop (transportH);
+
+    // ── Left panel: keyboard + bottom strip ───────────────
+    auto leftBody = leftPanelBounds.reduced (10, 8);
+    leftBottomStripBounds = leftBody.removeFromBottom (40);
+    keyboard.setBounds (leftBody);
+
+    // Left bottom strip — FOLLOW ON + PAUSE
     {
-        const int col = b % 2;
-        const int row = b / 2;
-        bankBtns[b].setBounds (rightInner.getX() + col * 62, ry + row * 40, 56, 34);
+        const int bH = leftBottomStripBounds.getHeight() - 4;
+        const int bW = (leftBottomStripBounds.getWidth() - 8) / 2;
+        const int y  = leftBottomStripBounds.getY() + 2;
+        btnFollowOn.setBounds (leftBottomStripBounds.getX(),          y, bW, bH);
+        btnPause.setBounds    (leftBottomStripBounds.getX() + bW + 8, y, bW, bH);
     }
-    ry += 94;
-    gainLabel.setBounds    (rightInner.getX(), ry, rightInner.getWidth(), 12); ry += 13;
-    gainSlider.setBounds   (rightInner.getX(), ry, rightInner.getWidth(), 18); ry += 24;
-    trimInLabel.setBounds  (rightInner.getX(), ry, rightInner.getWidth(), 12); ry += 13;
-    trimInSlider.setBounds (rightInner.getX(), ry, rightInner.getWidth(), 18); ry += 24;
-    trimOutLabel.setBounds (rightInner.getX(), ry, rightInner.getWidth(), 12); ry += 13;
-    trimOutSlider.setBounds(rightInner.getX(), ry, rightInner.getWidth(), 18); ry += 28;
-    voicesBounds = { rightInner.getX(), ry + 18, rightInner.getWidth(), 36 };
 
-    keyboard.setBounds (keyboardBounds);
-    statusLabel.setBounds     (statusBounds.getX() + 10, statusBounds.getY() + 5, statusBounds.getWidth() - 290, 16);
-    statusModeLabel.setBounds (statusBounds.getRight() - 280, statusBounds.getY() + 5, 270, 16);
+    // ── LCD labels ────────────────────────────────────────
+    {
+        auto li = lcdBounds.reduced (6, 6);
+        lcdBankLabel.setBounds (li.getX(), li.getY(),      li.getWidth(), 18);
+        lcdClipLabel.setBounds (li.getX(), li.getY() + 20, li.getWidth(), 22);
+        lcdDurLabel.setBounds  (li.getX(), li.getY() + 46, li.getWidth() / 2, 18);
+        lcdPosLabel.setBounds  (li.getX() + li.getWidth() / 2,
+                                 li.getY() + 46, li.getWidth() / 2, 18);
+        waveform.setBounds (li.getX(), li.getY() + 68, li.getWidth(),
+                            juce::jmax (20, lcdBounds.getHeight() - 68 - 8));
+    }
+
+    // ── Soft keys (5 buttons) ─────────────────────────────
+    {
+        const int sH = softKeyRowBounds.getHeight();
+        const int sW = (softKeyRowBounds.getWidth() - 4 * 4) / 5;
+        for (int i = 0; i < 5; ++i)
+            btnSoft[i].setBounds (softKeyRowBounds.getX() + i * (sW + 4),
+                                  softKeyRowBounds.getY(), sW, sH);
+    }
+
+    // ── ENTER row ─────────────────────────────────────────
+    {
+        const int eH = enterRowBounds.getHeight();
+        const int eW = (enterRowBounds.getWidth() * 65) / 100;
+        btnEnter.setBounds (enterRowBounds.getX(), enterRowBounds.getY(), eW, eH);
+    }
+
+    // ── Navigation cluster ────────────────────────────────
+    {
+        const int nG  = 5;
+        const int nBH = (navClusterBounds.getHeight() - 2 * nG) / 3;
+        const int nBW = (navClusterBounds.getWidth()  - 2 * nG) / 3;
+        const int x0  = navClusterBounds.getX();
+        const int y0  = navClusterBounds.getY();
+        btnNavBack.setBounds  (x0,               y0,             nBW, nBH);
+        btnNavDel.setBounds   (x0 + nBW + nG,    y0,             nBW, nBH);
+        btnNavFwd.setBounds   (x0 + 2*(nBW+nG),  y0,             nBW, nBH);
+        btnNavLeft.setBounds  (x0,               y0+nBH+nG,      nBW, nBH);
+        btnNavUp.setBounds    (x0 + nBW + nG,    y0+nBH+nG,      nBW, nBH);
+        btnNavRight.setBounds (x0 + 2*(nBW+nG),  y0+nBH+nG,      nBW, nBH);
+        btnNavDown.setBounds  (x0 + nBW + nG,    y0+2*(nBH+nG),  nBW, nBH);
+    }
+
+    // ── 3x3 right column ──────────────────────────────────
+    {
+        const int rG  = 5;
+        const int rBH = (rightColBounds.getHeight() - 2 * rG) / 3;
+        const int rBW = (rightColBounds.getWidth()  - 2 * rG) / 3;
+        const int x0  = rightColBounds.getX();
+        const int y0  = rightColBounds.getY();
+        btnCancel.setBounds     (x0,              y0,            rBW, rBH);
+        btnMenu.setBounds       (x0 + rBW + rG,   y0,            rBW, rBH);
+        btnBankSelect.setBounds (x0 + 2*(rBW+rG), y0,            rBW, rBH);
+        btnFind.setBounds         (x0,              y0+rBH+rG,    rBW, rBH);
+        btnAssignHotKey.setBounds (x0 + rBW + rG,   y0+rBH+rG,    rBW, rBH);
+        btnHotList.setBounds      (x0 + 2*(rBW+rG), y0+rBH+rG,    rBW, rBH);
+        btnLoop.setBounds    (x0,            y0+2*(rBH+rG),  rBW, rBH);
+        btnPreview.setBounds (x0 + rBW + rG, y0+2*(rBH+rG),  rBW, rBH);
+    }
+
+    // ── Transport row (5 buttons) ─────────────────────────
+    {
+        const int tH = transportRowBounds.getHeight();
+        const int tG = 5;
+        const int tW = (transportRowBounds.getWidth() - 4 * tG) / 5;
+        int x = transportRowBounds.getX();
+        const int y = transportRowBounds.getY();
+        btnStop.setBounds   (x, y, tW, tH); x += tW + tG;
+        btnPlay.setBounds   (x, y, tW, tH); x += tW + tG;
+        btnRecord.setBounds (x, y, tW, tH); x += tW + tG;
+        btnRew.setBounds    (x, y, tW, tH); x += tW + tG;
+        btnFF.setBounds     (x, y, tW, tH);
+    }
+
+    // ── Meter column ──────────────────────────────────────
+    {
+        auto meter = meterColumnBounds.reduced (6, 10);
+        const int vuH    = 170;
+        const int vuBarW = 14;
+        const int vuGap  = 5;
+        const int vuX    = meter.getCentreX() - vuBarW - vuGap / 2;
+        vuLeft.setBounds  (vuX,              meter.getY() + 18, vuBarW, vuH);
+        vuRight.setBounds (vuX+vuBarW+vuGap, meter.getY() + 18, vuBarW, vuH);
+        const int knobSz     = 42;
+        const int knobStartY = meter.getY() + 18 + vuH + 10;
+        const int knobX      = meter.getCentreX() - knobSz / 2;
+        knobInputL.setBounds    (knobX, knobStartY,          knobSz, knobSz);
+        knobInputR.setBounds    (knobX, knobStartY + 52,     knobSz, knobSz);
+        knobHeadphones.setBounds(knobX, knobStartY + 52 * 2, knobSz, knobSz);
+    }
+
+    // ── Top rail ─────────────────────────────────────────
+    titleLabel.setBounds (topRailBounds.getX() + 20, topRailBounds.getY() + 6,  360, 16);
+    subLabel.setBounds   (topRailBounds.getX() + 20, topRailBounds.getY() + 24, 470, 12);
+    clockLabel.setBounds (topRailBounds.getRight() - 180, topRailBounds.getY() + 6,  164, 14);
+    timerLabel.setBounds (topRailBounds.getRight() - 180, topRailBounds.getY() + 20, 164, 18);
+
+    // ── Status bar ────────────────────────────────────────
+    statusLabel.setBounds     (statusBounds.getX() + 10, statusBounds.getY() + 4,
+                               statusBounds.getWidth() - 230, 16);
+    statusModeLabel.setBounds (statusBounds.getRight() - 220, statusBounds.getY() + 4, 210, 16);
 }
 
 // ── Paint chassis ─────────────────────────────────────────
 void MainComponent::paint (juce::Graphics& g)
 {
+    // Room background
     g.fillAll (C::ROOM);
 
+    // Chassis body — IR2 light gray
     g.setColour (C::CHASSIS);
     g.fillRoundedRectangle (hardwareBounds.toFloat(), 10.0f);
-    juce::Path bluePanel;
-    const float splitLeft = (float) leftPanelBounds.getRight() - 26.0f;
-    const float splitPeak = (float) monitorBounds.getRight() + 36.0f;
-    bluePanel.startNewSubPath (splitLeft, (float) hardwareBounds.getY());
-    bluePanel.lineTo ((float) hardwareBounds.getRight(), (float) hardwareBounds.getY());
-    bluePanel.lineTo ((float) hardwareBounds.getRight(), (float) hardwareBounds.getBottom());
-    bluePanel.lineTo ((float) rightPanelBounds.getX() - 14.0f, (float) hardwareBounds.getBottom());
-    bluePanel.lineTo (splitPeak, (float) hardwareBounds.getCentreY() + 10.0f);
-    bluePanel.lineTo ((float) centerPanelBounds.getX() + 30.0f, (float) hardwareBounds.getCentreY() - 120.0f);
-    bluePanel.closeSubPath();
-    g.setColour (C::PANEL_BLUE);
-    g.fillPath (bluePanel);
-    g.setColour (juce::Colour (0x33ffffff));
-    g.drawLine (splitLeft, (float) hardwareBounds.getY() + 6.0f,
-                (float) centerPanelBounds.getX() + 26.0f, (float) hardwareBounds.getCentreY() - 118.0f, 2.0f);
-    g.drawLine ((float) centerPanelBounds.getX() + 26.0f, (float) hardwareBounds.getCentreY() - 118.0f,
-                splitPeak, (float) hardwareBounds.getCentreY() + 12.0f, 2.0f);
-    g.drawLine (splitPeak, (float) hardwareBounds.getCentreY() + 12.0f,
-                (float) rightPanelBounds.getX() - 10.0f, (float) hardwareBounds.getBottom() - 6.0f, 2.0f);
+
+    // Right panel (steel blue) covers right portion
+    {
+        juce::Rectangle<int> rpFull (rightPanelBounds.getUnion (meterColumnBounds));
+        // Clip to rounded hardware rect
+        juce::Path rpPath;
+        rpPath.addRoundedRectangle (
+            (float)rpFull.getX(), (float)hardwareBounds.getY(),
+            (float)rpFull.getWidth(), (float)hardwareBounds.getHeight(),
+            10.0f, 10.0f, false, true, false, true);
+        g.setColour (C::PANEL_BLUE);
+        g.fillPath (rpPath);
+    }
+
+    // Chassis bevel
     g.setColour (C::BEVEL);
     g.drawRoundedRectangle (hardwareBounds.toFloat(), 10.0f, 1.0f);
+
+    // Divider between left (gray) and right (blue) panels
+    g.setColour (juce::Colour (0xff8a9aaa));
+    g.fillRect (leftPanelBounds.getRight(), mainBodyBounds.getY(), 2, mainBodyBounds.getHeight());
+
+    // Corner screws
     g.setColour (C::SCREW);
     for (const auto& p : { juce::Point<int> (hardwareBounds.getX() + 12, hardwareBounds.getY() + 12),
-                           juce::Point<int> (hardwareBounds.getRight() - 12, hardwareBounds.getY() + 12),
-                           juce::Point<int> (hardwareBounds.getX() + 12, hardwareBounds.getBottom() - 12),
-                           juce::Point<int> (hardwareBounds.getRight() - 12, hardwareBounds.getBottom() - 12) })
-        g.fillEllipse ((float) p.x - 3.0f, (float) p.y - 3.0f, 6.0f, 6.0f);
+                            juce::Point<int> (hardwareBounds.getRight() - 12, hardwareBounds.getY() + 12),
+                            juce::Point<int> (hardwareBounds.getX() + 12, hardwareBounds.getBottom() - 12),
+                            juce::Point<int> (hardwareBounds.getRight() - 12, hardwareBounds.getBottom() - 12) })
+        g.fillEllipse ((float)p.x - 3.0f, (float)p.y - 3.0f, 6.0f, 6.0f);
 
     // Top rail
     g.setColour (C::RAIL);
     g.fillRect  (topRailBounds);
     g.setColour (C::CHASSIS_DRK);
-    g.fillRect  (topRailBounds.removeFromBottom (2));
-    for (int i = 0; i < 4; ++i)
-    {
-        const float x = (float) topRailBounds.getCentreX() + 24.0f * (float) i - 48.0f;
-        const juce::Colour lamp = i == 0 ? C::LED_GREEN : juce::Colour (0xff0c1a0c);
-        g.setColour (lamp);
-        g.fillEllipse (x, (float) topRailBounds.getY() + 13.0f, 10.0f, 10.0f);
-        g.setColour (juce::Colour (0xff030303));
-        g.drawEllipse (x, (float) topRailBounds.getY() + 13.0f, 10.0f, 10.0f, 1.0f);
-    }
+    g.fillRect  (topRailBounds.getX(), topRailBounds.getBottom() - 1, topRailBounds.getWidth(), 1);
 
-    // Panels border
-    g.setColour (juce::Colour (0xffeef1f4));
-    g.fillRect (leftPanelBounds);
-    g.setColour (juce::Colour (0xff2f4768));
-    g.fillRect (monitorBounds.withTrimmedLeft (-6).withTrimmedRight (-6));
-    g.fillRect (centerPanelBounds);
-    g.fillRect (rightPanelBounds);
-    g.setColour (C::CHASSIS_DRK);
-    g.fillRect  (leftPanelBounds.getRight() - 1, mainBodyBounds.getY(), 1, mainBodyBounds.getHeight());
-    g.fillRect  (rightPanelBounds.getX(),         mainBodyBounds.getY(), 1, mainBodyBounds.getHeight());
-
-    drawPanelFrame (g, monitorBounds, 8.0f);
-    drawPanelFrame (g, bankBounds, 8.0f);
-    drawPanelFrame (g, slotBounds, 8.0f);
-    drawPanelFrame (g, editClusterBounds, 8.0f);
-    drawPanelFrame (g, transportClusterBounds, 8.0f);
-
-    // LCD surround
-    const int lcdX = lcdBounds.getX();
-    const int lcdY = lcdBounds.getY();
-    const int lcdW = lcdBounds.getWidth();
-    const int lcdH = lcdBounds.getHeight();
-    g.setColour (C::LCD_BG);
-    g.fillRect  (lcdX - 4, lcdY - 4, lcdW + 8, lcdH + 8);
-    g.setColour (C::LCD_FRAME);
-    g.drawRect  (lcdX - 5, lcdY - 5, lcdW + 10, lcdH + 10, 1);
-
-    g.setColour (juce::Colour (0xff7b8797));
-    g.setFont (monoFont (9.0f));
-    g.drawText ("MONITOR", monitorBounds.getX(), monitorBounds.getY() + 8, monitorBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.setColour (juce::Colour (0xff9cb7d8));
-    g.drawText ("EDITOR DISPLAY", lcdBounds.getX(), lcdBounds.getY() - 20, lcdBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.drawText ("BANK", bankBounds.getX(), bankBounds.getY() + 8, bankBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.drawText ("SLOT", slotBounds.getX(), slotBounds.getY() + 8, slotBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.drawText ("EDIT", editClusterBounds.getX(), editClusterBounds.getY() + 8, editClusterBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.drawText ("TRANSPORT", transportClusterBounds.getX(), transportClusterBounds.getY() + 8, transportClusterBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.drawText ("SCRUB", scrubWheelBounds.getX() - 24, scrubWheelBounds.getY() - 18, scrubWheelBounds.getWidth() + 48, 12, juce::Justification::centredTop);
-    g.drawText ("VOICES", voicesBounds.getX(), voicesBounds.getY() - 14, voicesBounds.getWidth(), 12, juce::Justification::centredTop);
-    g.drawText ("PLAY MODES", lowerDeckBounds.getX(), modeBounds.getY() - 10, lowerDeckBounds.getWidth(), 12, juce::Justification::centredTop);
-
-    g.setColour (juce::Colour (0xff0a0b0c));
-    g.fillEllipse (scrubWheelBounds.toFloat());
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a3e44), (float) scrubWheelBounds.getCentreX() - 10.0f, (float) scrubWheelBounds.getY() + 10.0f,
-                                            juce::Colour (0xff1a1c1e), (float) scrubWheelBounds.getCentreX() + 20.0f, (float) scrubWheelBounds.getBottom() - 10.0f, false));
-    g.fillEllipse (scrubWheelBounds.reduced (3).toFloat());
-    g.setColour (C::LED_AMBER);
-    g.fillRoundedRectangle ((float) scrubWheelBounds.getCentreX() - 2.0f, (float) scrubWheelBounds.getY() + 8.0f, 4.0f, 12.0f, 2.0f);
-    g.setColour (C::LCD_TEXT);
-    g.setFont (monoFont (28.0f, juce::Font::bold));
-    g.drawText (juce::String (activeVoiceCount), voicesBounds, juce::Justification::centred, false);
-
-    g.setColour (juce::Colour (0xffc7d5e9));
-    g.setFont (monoFont (10.0f));
-    g.drawText ("CUT / MARK / FIND / UNDO", editClusterBounds.getX(), editClusterBounds.getBottom() - 24, editClusterBounds.getWidth(), 14, juce::Justification::centred, false);
-    g.drawText ("FAST ACCESS PLAYBACK", transportClusterBounds.getX(), transportClusterBounds.getBottom() - 24, transportClusterBounds.getWidth(), 14, juce::Justification::centred, false);
-
-    // Keyboard section
-    g.setColour (juce::Colour (0xffe8ecef));
-    g.fillRect  (keyboardBounds);
-    g.setColour (juce::Colour(0xffb9c0c8));
-    g.fillRect  (keyboardBounds.removeFromTop(1));
-
-    // Status bar
+    // Status bar rail
     g.setColour (C::RAIL);
     g.fillRect  (statusBounds);
     g.setColour (C::CHASSIS_DRK);
-    g.fillRect  (statusBounds.removeFromTop (1));
+    g.fillRect  (statusBounds.getX(), statusBounds.getY(), statusBounds.getWidth(), 1);
+
+    // LCD surround (black with frame)
+    {
+        const auto lcdf = lcdBounds.expanded (5);
+        g.setColour (C::LCD_BG);
+        g.fillRoundedRectangle (lcdf.toFloat(), 4.0f);
+        g.setColour (C::LCD_FRAME);
+        g.drawRoundedRectangle (lcdf.toFloat(), 4.0f, 1.5f);
+        // Cyan cursor line at top of LCD
+        g.setColour (C::LCD_TEXT.withAlpha (0.5f));
+        g.fillRect (lcdBounds.getX(), lcdBounds.getY() + 2, lcdBounds.getWidth(), 1);
+    }
+
+    // Section labels on right panel
+    g.setColour (C::TEXT_DIM);
+    g.setFont (monoFont (8.0f));
+    g.drawText ("DISPLAY",
+                lcdBounds.getX(), lcdBounds.getY() - 14,
+                lcdBounds.getWidth(), 12, juce::Justification::centredLeft, false);
+    g.drawText ("TRANSPORT",
+                transportRowBounds.getX(), transportRowBounds.getY() - 10,
+                transportRowBounds.getWidth(), 10, juce::Justification::centredLeft, false);
+
+    // Power indicator (circle to right of ENTER)
+    {
+        const int eR = enterRowBounds.getRight();
+        const int cy = enterRowBounds.getCentreY();
+        const int r  = 8;
+        g.setColour (juce::Colour (0xff1aaa44));
+        g.fillEllipse ((float)(eR - r*3), (float)(cy - r), (float)(r*2), (float)(r*2));
+        g.setColour (juce::Colour (0xff0a6622));
+        g.drawEllipse ((float)(eR - r*3), (float)(cy - r), (float)(r*2), (float)(r*2), 1.0f);
+    }
+
+    // Meter column background (slightly darker blue)
+    g.setColour (C::METER_BG);
+    g.fillRect  (meterColumnBounds);
+
+    // "PEAK LEVEL" label at top of meter column
+    g.setColour (C::TEXT_DIM);
+    g.setFont (monoFont (8.0f));
+    g.drawText ("PEAK LEVEL",
+                meterColumnBounds.getX(), meterColumnBounds.getY() + 6,
+                meterColumnBounds.getWidth(), 12, juce::Justification::centred, false);
+
+    // Knob labels
+    {
+        auto meter2 = meterColumnBounds.reduced (6, 10);
+        const int knobSz2     = 42;
+        const int vuH2        = 170;
+        const int knobStartY2 = meter2.getY() + 18 + vuH2 + 10;
+        const int knobX2      = meter2.getCentreX() - knobSz2 / 2;
+        g.setColour (C::TEXT_DIM);
+        g.setFont (monoFont (7.0f));
+        g.drawText ("INPUT L", knobX2-4, knobStartY2 - 10,          knobSz2+8, 10, juce::Justification::centred, false);
+        g.drawText ("INPUT R", knobX2-4, knobStartY2 + 52 - 10,     knobSz2+8, 10, juce::Justification::centred, false);
+        g.drawText ("PHONES",  knobX2-4, knobStartY2 + 52*2 - 10,   knobSz2+8, 10, juce::Justification::centred, false);
+        // VU labels
+        g.drawText ("L", vuLeft.getX(),  meterColumnBounds.getY() + 8, vuLeft.getWidth(),  12, juce::Justification::centred, false);
+        g.drawText ("R", vuRight.getX(), meterColumnBounds.getY() + 8, vuRight.getWidth(), 12, juce::Justification::centred, false);
+    }
+
+    // Active voice count in status
+    g.setColour (C::LCD_TEXT);
+    g.setFont (monoFont (11.0f, juce::Font::bold));
+    g.drawText (juce::String (activeVoiceCount) + " PLAYING",
+                statusBounds.getRight() - 120, statusBounds.getY() + 4,
+                110, 16, juce::Justification::right, false);
 }
 
 // ── Timer (60fps) ─────────────────────────────────────────
@@ -603,41 +1079,45 @@ void MainComponent::timerCallback()
     vuLeft.setLevel  (engine.getVULevel (0));
     vuRight.setLevel (engine.getVULevel (1));
 
-    // Update playhead
+    // Update playhead for selected key
     if (selectedKey >= 0 && isPlaying (selectedKey))
     {
         const auto& slot = currentSlotForKey (selectedKey);
         if (slot.isLoaded())
         {
-            const double pos     = engine.getVoicePosition (currentBank, selectedKey);
-            const double segDur  = (slot.trimOut - slot.trimIn) * slot.duration;
-            const double frac    = segDur > 0.0 ? pos / segDur : 0.0;
+            const double pos    = engine.getVoicePosition (currentBank, selectedKey);
+            const double segDur = (slot.trimOut - slot.trimIn) * slot.duration;
+            const double frac   = segDur > 0.0 ? pos / segDur : 0.0;
             waveform.setPlayheadFraction (frac);
         }
     }
 
-    // Update poly count in status
+    // Count active voices
     int count = 0;
     for (int ki = 0; ki < NUM_KEYS; ++ki)
-        if (engine.isVoiceActive(currentBank, ki)) ++count;
+        if (engine.isVoiceActive (currentBank, ki)) ++count;
     activeVoiceCount = count;
-    statusModeLabel.setText (
-        "MODE: " + modeToString() + "  |  " + juce::String(count) + " PLAYING",
-        juce::dontSendNotification);
-    repaint (rightPanelBounds);
-}
 
-juce::String MainComponent::modeToString() const
-{
-    switch (playMode)
+    // Update LCD position every frame
+    if (selectedKey >= 0 && engine.isVoiceActive (currentBank, selectedKey))
     {
-        case PlayMode::FireStop:  return "FIRE/STOP";
-        case PlayMode::PlayEnd:   return "PLAY-END";
-        case PlayMode::Momentary: return "MOMENTARY";
-        case PlayMode::LoopFire:  return "LOOP FIRE";
-        case PlayMode::Restart:   return "RESTART";
+        const double pos = engine.getVoicePosition (currentBank, selectedKey);
+        lcdPosLabel.setText ("> " + formatTime (pos), juce::dontSendNotification);
     }
-    return {};
+    // CANCEL lights up only when there's an active mode or something playing
+    {
+        const bool hasMode    = (currentMode != UIMode::Normal);
+        const bool hasPlaying = (activeVoiceCount > 0);
+        btnCancel.setToggleState (hasMode || hasPlaying, juce::dontSendNotification);
+    }
+
+    // Update bank/mode label
+    statusModeLabel.setText ("BANK " + bankName (currentBank)
+        + "  |  " + juce::String (activeVoiceCount) + " PLAYING",
+        juce::dontSendNotification);
+
+    repaint (meterColumnBounds);
+    repaint (statusBounds);
 }
 
 void MainComponent::updateClockLabel()
@@ -648,46 +1128,30 @@ void MainComponent::updateClockLabel()
 
 void MainComponent::updateTimerLabel()
 {
-    if (selectedKey < 0 || !isPlaying(selectedKey)) return;
-    const double pos = engine.getVoicePosition (currentBank, selectedKey);
-    const auto& slot = currentSlotForKey(selectedKey);
-    const double elapsed = pos;
-    const int min  = (int)(elapsed / 60.0);
-    const double s = elapsed - min * 60.0;
-    timerLabel.setText (juce::String::formatted ("%d:%04.1f", min, s), juce::dontSendNotification);
+    if (selectedKey < 0 || !isPlaying (selectedKey)) return;
+    const double pos  = engine.getVoicePosition (currentBank, selectedKey);
+    const int    min  = (int)(pos / 60.0);
+    const double sec  = pos - min * 60.0;
+    timerLabel.setText (juce::String::formatted ("%d:%04.1f", min, sec),
+                        juce::dontSendNotification);
 }
 
 // ── Playback logic ────────────────────────────────────────
 void MainComponent::fireKey (int ki)
 {
-    auto& slot = currentSlotForKey(ki);
+    auto& slot = currentSlotForKey (ki);
     if (!slot.isLoaded()) return;
 
-    switch (playMode)
-    {
-        case PlayMode::FireStop:
-            if (isPlaying(ki)) stopKey(ki);
-            else               startKey(ki, false);
-            break;
-        case PlayMode::PlayEnd:
-            startKey(ki, false);
-            break;
-        case PlayMode::LoopFire:
-            if (isPlaying(ki)) stopKey(ki);
-            else               startKey(ki, true);
-            break;
-        case PlayMode::Restart:
-            startKey(ki, false);   // always restarts from trimIn
-            break;
-        case PlayMode::Momentary:
-            startKey(ki, false);   // held down
-            break;
-    }
+    if (isPlaying (ki))
+        stopKey (ki);
+    else
+        startKey (ki, loopAll);
 }
 
 void MainComponent::startKey (int ki, bool forceLoop)
 {
-    auto& slot = currentSlotForKey(ki);
+    auto& slot = currentSlotForKey (ki);
+    if (!slot.isLoaded()) return;
     engine.fireVoice (slot, forceLoop || loopAll);
     keyboard.setKeyPlaying (ki, true);
     selectKey (ki);
@@ -701,7 +1165,8 @@ void MainComponent::stopKey (int ki)
     if (ki == selectedKey)
     {
         waveform.clearPlayhead();
-        timerLabel.setText ("\xe2\x80\x93:\xe2\x80\x93\xe2\x80\x93.\xe2\x80\x93", juce::dontSendNotification);
+        timerLabel.setText ("\xe2\x80\x93:\xe2\x80\x93\xe2\x80\x93.\xe2\x80\x93",
+                            juce::dontSendNotification);
     }
 }
 
@@ -710,7 +1175,8 @@ void MainComponent::stopAll()
     engine.stopAll();
     keyboard.refreshAll();
     waveform.clearPlayhead();
-    timerLabel.setText ("\xe2\x80\x93:\xe2\x80\x93\xe2\x80\x93.\xe2\x80\x93", juce::dontSendNotification);
+    timerLabel.setText ("\xe2\x80\x93:\xe2\x80\x93\xe2\x80\x93.\xe2\x80\x93",
+                        juce::dontSendNotification);
     setStatus ("STOP -- all voices killed");
 }
 
@@ -718,25 +1184,25 @@ void MainComponent::selectKey (int ki)
 {
     selectedKey = ki;
     keyboard.setActiveKey (ki);
-    const auto& slot = currentSlotForKey(ki);
-    lcdClipLabel.setText (slot.isLoaded() ? slot.name : "-- NO CLIP LOADED --",
+    const auto& slot = currentSlotForKey (ki);
+    lcdClipLabel.setText (slot.isLoaded() ? slot.name : "-- NO CLIP --",
                            juce::dontSendNotification);
-    lcdDurLabel.setText  (slot.isLoaded() ? formatTime(slot.duration) : "0:00.0",
+    lcdDurLabel.setText  (slot.isLoaded() ? formatTime (slot.duration) : "0:00.0",
                            juce::dontSendNotification);
+    lcdPosLabel.setText  ("> 0:00.0", juce::dontSendNotification);
     waveform.setSlot (slot.isLoaded() ? &slot : nullptr);
-    updateSlotControls();
+    updateLCD();
 }
 
 void MainComponent::switchBank (int b)
 {
     currentBank = b;
-    updateBankButtons();
     keyboard.setBank (b, &banks[b]);
-    lcdBankLabel.setText ("BANK " + juce::String::charToString('A' + b),
-                           juce::dontSendNotification);
+    keyboard.setUIMode ((int)currentMode);   // preserve mode after bank change
     if (selectedKey >= 0) selectKey (selectedKey);
-    setStatus ("Bank " + juce::String::charToString('A' + b)
-               + " -- " + juce::String(countLoaded(b)) + " clips loaded");
+    setStatus ("Bank " + bankName (b)
+               + " -- " + juce::String (countLoaded (b)) + " clips loaded");
+    updateLCD();
 }
 
 int MainComponent::countLoaded (int b) const
@@ -746,27 +1212,49 @@ int MainComponent::countLoaded (int b) const
     return n;
 }
 
-void MainComponent::setMode (PlayMode mode)
-{
-    playMode = mode;
-    updateModeButtons();
-}
-
 void MainComponent::loadFileForKey (int ki, const juce::File& file)
 {
-    auto& slot = currentSlotForKey(ki);
+    // Stop any voice already playing on this slot
+    engine.stopVoice (currentBank, ki);
+
+    auto& slot = currentSlotForKey (ki);
+
+    // Reset all per-slot edit params so old trim/fade/gain don't bleed onto the new file
+    slot.trimIn  = 0.0f;
+    slot.trimOut = 1.0f;
+    slot.fadeIn  = 0.0f;
+    slot.fadeOut = 0.0f;
+    slot.gain    = 1.0f;
+
     setStatus ("Loading: " + file.getFileName() + "...");
     bool ok = engine.loadFile (slot, file);
     if (ok)
     {
-        slot.name = file.getFileNameWithoutExtension().toUpperCase().substring(0,14);
+        slot.name = file.getFileNameWithoutExtension().toUpperCase().substring (0, 14);
         keyboard.refreshKey (ki);
         selectKey (ki);
-        setStatus ("Loaded: " + slot.name + "  (" + formatTime(slot.duration) + ")");
+        setStatus ("Loaded: " + slot.name + "  (" + formatTime (slot.duration) + ")");
+        updateLCD();
     }
     else
     {
-        setStatus ("ERROR: Could not decode " + file.getFileName());
+        const auto ext = file.getFileExtension().toUpperCase();
+        juce::String reason;
+        if (ext == ".MP3")
+            reason = "MP3 support is disabled. Convert to WAV or FLAC and try again.";
+        else if (!file.existsAsFile())
+            reason = "File not found.";
+        else
+            reason = "The file could not be decoded.\n"
+                     "Supported formats: WAV, AIFF, FLAC, OGG\n\n"
+                     "If this is a FLAC, try re-encoding it at 16-bit or 24-bit PCM.";
+
+        setStatus ("ERROR: " + file.getFileName() + " -- " + reason.upToFirstOccurrenceOf ("\n", false, false));
+
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::AlertWindow::WarningIcon,
+            "Cannot Load File",
+            file.getFileName() + "\n\n" + reason);
     }
 }
 
@@ -778,125 +1266,17 @@ void MainComponent::clearKey (int ki)
     slot.bankIndex = currentBank;
     slot.keyIndex  = ki;
     slot.key       = TRIGGER_KEYS[ki];
-    slot.name      = PRESET_NAMES[currentBank][ki];
+    slot.name      = (currentBank < 4) ? PRESET_NAMES[currentBank][ki] : ("SLOT " + juce::String (ki + 1));
     keyboard.refreshKey (ki);
     if (ki == selectedKey) selectKey (ki);
-    setStatus ("Key [" + juce::String::charToString((juce::juce_wchar)toupper(TRIGGER_KEYS[ki])) + "] cleared");
+    const char k = TRIGGER_KEYS[ki];
+    const juce::String kStr = (k != '\0')
+        ? juce::String::charToString ((juce::juce_wchar)toupper(k))
+        : juce::String (ki + 1);
+    setStatus ("Slot " + juce::String (ki + 1) + " [" + kStr + "] cleared");
 }
 
-void MainComponent::storeUndoFromKey (int ki)
-{
-    if (ki < 0 || ki >= NUM_KEYS)
-        return;
-
-    undoSlot = banks[currentBank][ki];
-    undoKey = ki;
-}
-
-void MainComponent::copySelectedSlot ()
-{
-    if (!hasSelection())
-    {
-        setStatus ("COPY -- no hot key selected");
-        return;
-    }
-
-    clipboardSlot = currentSlotForKey (selectedKey);
-    setStatus ("COPY -- stored [" + hotKeyLabelForIndex (selectedKey) + "] in clipboard");
-}
-
-void MainComponent::cutSelectedSlot ()
-{
-    if (!hasSelection())
-    {
-        setStatus ("CUT -- no hot key selected");
-        return;
-    }
-
-    copySelectedSlot();
-    eraseSelectedSlot();
-    setStatus ("CUT -- moved selected cut into clipboard");
-}
-
-void MainComponent::insertClipboardToSelected ()
-{
-    if (!hasSelection())
-    {
-        setStatus ("INSERT -- no destination hot key selected");
-        return;
-    }
-
-    if (!clipboardSlot.has_value())
-    {
-        setStatus ("INSERT -- clipboard is empty");
-        return;
-    }
-
-    storeUndoFromKey (selectedKey);
-    auto pasted = *clipboardSlot;
-    pasted.bankIndex = currentBank;
-    pasted.keyIndex = selectedKey;
-    pasted.key = TRIGGER_KEYS[selectedKey];
-    banks[currentBank][selectedKey] = pasted;
-    keyboard.refreshKey (selectedKey);
-    selectKey (selectedKey);
-    setStatus ("INSERT -- pasted clip to [" + hotKeyLabelForIndex (selectedKey) + "]");
-}
-
-void MainComponent::eraseSelectedSlot ()
-{
-    if (!hasSelection())
-    {
-        setStatus ("ERASE -- no hot key selected");
-        return;
-    }
-
-    storeUndoFromKey (selectedKey);
-    clearKey (selectedKey);
-}
-
-void MainComponent::undoLastEdit ()
-{
-    if (!undoSlot.has_value() || undoKey < 0 || undoKey >= NUM_KEYS)
-    {
-        setStatus ("UNDO -- nothing to restore");
-        return;
-    }
-
-    banks[currentBank][undoKey] = *undoSlot;
-    banks[currentBank][undoKey].bankIndex = currentBank;
-    banks[currentBank][undoKey].keyIndex = undoKey;
-    banks[currentBank][undoKey].key = TRIGGER_KEYS[undoKey];
-    keyboard.refreshKey (undoKey);
-    selectKey (undoKey);
-    setStatus ("UNDO -- restored [" + hotKeyLabelForIndex (undoKey) + "]");
-}
-
-void MainComponent::markSelectedKey ()
-{
-    if (!hasSelection())
-    {
-        setStatus ("MARK -- no hot key selected");
-        return;
-    }
-
-    markedKey = selectedKey;
-    setStatus ("MARK -- stored location [" + hotKeyLabelForIndex (selectedKey) + "]");
-}
-
-void MainComponent::goToMarkedKey ()
-{
-    if (!markedKey.has_value())
-    {
-        setStatus ("GO TO -- no mark stored");
-        return;
-    }
-
-    selectKey (*markedKey);
-    setStatus ("GO TO -- returned to marked hot key");
-}
-
-void MainComponent::findSlot ()
+void MainComponent::findSlot()
 {
     auto* findWindow = new juce::AlertWindow (
         "Find Cut",
@@ -904,7 +1284,7 @@ void MainComponent::findSlot ()
         juce::AlertWindow::NoIcon);
 
     findWindow->addTextEditor ("query", "");
-    findWindow->addButton ("Find", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    findWindow->addButton ("Find",   1, juce::KeyPress (juce::KeyPress::returnKey));
     findWindow->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<juce::AlertWindow> safeWindow (findWindow);
@@ -927,19 +1307,15 @@ void MainComponent::findSlot ()
                 if (banks[currentBank][i].name.toUpperCase().contains (query))
                 {
                     selectKey (i);
-                    setStatus ("FIND -- selected [" + hotKeyLabelForIndex (i) + "] " + banks[currentBank][i].name);
+                    setStatus ("FIND -- slot " + juce::String (i + 1) + ": " + banks[currentBank][i].name);
                     return;
                 }
             }
 
-            setStatus ("FIND -- no cut matched \"" + query + "\" in bank " + juce::String::charToString ('A' + currentBank));
+            setStatus ("FIND -- no cut matched \"" + query + "\" in bank "
+                       + bankName (currentBank));
         }),
         true);
-}
-
-void MainComponent::setPendingStatus (const juce::String& featureName)
-{
-    setStatus (featureName + " -- panel control added, deeper behavior coming next");
 }
 
 // ── Keyboard input ────────────────────────────────────────
@@ -951,109 +1327,91 @@ bool MainComponent::keyPressed (const juce::KeyPress& key, juce::Component*)
     if (mods.isCommandDown() || mods.isCtrlDown())
     {
         const int kc = key.getKeyCode();
-        if (kc == 'a' || kc == 'A') { switchBank(0); return true; }
-        if (kc == 'b' || kc == 'B') { switchBank(1); return true; }
-        if (kc == 'c' || kc == 'C') { switchBank(2); return true; }
-        if (kc == 'd' || kc == 'D') { switchBank(3); return true; }
+        if (kc == 'a' || kc == 'A') { switchBank (0); return true; }
+        if (kc == 'b' || kc == 'B') { switchBank (1); return true; }
+        if (kc == 'c' || kc == 'C') { switchBank (2); return true; }
+        if (kc == 'd' || kc == 'D') { switchBank (3); return true; }
         if (kc == 'l' || kc == 'L') { btnLoop.triggerClick(); return true; }
         if (kc == '.')               { stopAll(); return true; }
         if (key.getKeyCode() == juce::KeyPress::deleteKey ||
             key.getKeyCode() == juce::KeyPress::backspaceKey)
-        { if (selectedKey >= 0) clearKey(selectedKey); return true; }
+        {
+            if (selectedKey >= 0) clearKey (selectedKey);
+            return true;
+        }
         if (key.getKeyCode() == juce::KeyPress::returnKey)
-        { if (selectedKey >= 0) startKey(selectedKey,false); return true; }
+        {
+            if (selectedKey >= 0) startKey (selectedKey, false);
+            return true;
+        }
         return false;
     }
 
     // No modifier — map to trigger keys
-    if (playMode == PlayMode::Momentary) return true; // handled in keyState
-
     char ch = (char)key.getTextCharacter();
-    // JUCE returns uppercase for alpha keys without shift, so lowercase
-    if (ch >= 'A' && ch <= 'Z') ch = (char)tolower(ch);
+    if (ch >= 'A' && ch <= 'Z') ch = (char)tolower (ch);
 
-    for (int i = 0; i < TRIGGER_KEY_COUNT; ++i)
+    // Space bar — also mode-aware
+    if (key.getKeyCode() == juce::KeyPress::spaceKey)
     {
-        if (TRIGGER_KEYS[i] == ch)
+        for (int i = 0; i < NUM_KEYS; ++i)
         {
-            fireKey (i);
+            if (TRIGGER_KEYS[i] == ' ')
+            {
+                switch (currentMode)
+                {
+                    case UIMode::BankSelect:   switchBank (i); enterNormalMode(); break;
+                    case UIMode::AssignHotKey: selectKey (i); openFileChooserForKey (i); enterNormalMode(); break;
+                    case UIMode::HotList:      addToHotList (i); break;
+                    default:                   fireKey (i); break;
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // All other trigger keys — route through the same mode-aware dispatch as on-screen keys
+    for (int i = 0; i < NUM_KEYS; ++i)
+    {
+        if (TRIGGER_KEYS[i] != '\0' && TRIGGER_KEYS[i] == ch)
+        {
+            switch (currentMode)
+            {
+                case UIMode::BankSelect:
+                    switchBank (i);
+                    enterNormalMode();
+                    break;
+                case UIMode::AssignHotKey:
+                    selectKey (i);
+                    openFileChooserForKey (i);
+                    enterNormalMode();
+                    break;
+                case UIMode::HotList:
+                    addToHotList (i);
+                    break;
+                case UIMode::Normal:
+                default:
+                    fireKey (i);
+                    break;
+            }
             return true;
         }
     }
 
-    // Space bar
-    if (key.getKeyCode() == juce::KeyPress::spaceKey)
-    {
-        fireKey (TRIGGER_KEY_COUNT - 1);  // space is last
-        return true;
-    }
-
     return false;
 }
 
-bool MainComponent::keyStateChanged (bool isDown, juce::Component*)
+bool MainComponent::keyStateChanged (bool /*isDown*/, juce::Component*)
 {
-    if (playMode != PlayMode::Momentary) return false;
-
-    for (int i = 0; i < TRIGGER_KEY_COUNT; ++i)
-    {
-        char ch = TRIGGER_KEYS[i];
-        juce::KeyPress kp (ch, juce::ModifierKeys::noModifiers, (juce::juce_wchar)ch);
-        const bool held = juce::KeyPress::isKeyCurrentlyDown (ch);
-        if (held && isDown  && !isPlaying(i)) startKey(i, false);
-        if (!held && !isDown && isPlaying(i)) stopKey(i);
-    }
     return false;
 }
 
 // ── UI updates ────────────────────────────────────────────
-void MainComponent::updateBankButtons()
-{
-    for (int b = 0; b < 4; ++b)
-    {
-        const bool active = (b == currentBank);
-        bankBtns[b].setColour (juce::TextButton::buttonColourId,
-                               active ? juce::Colour(0xffeff6ec) : C::BTN_FACE);
-        bankBtns[b].setColour (juce::TextButton::textColourOffId,
-                               active ? juce::Colour (0xff238a53) : C::TEXT_DIM);
-    }
-}
-
-void MainComponent::updateModeButtons()
-{
-    struct Pair { PlayMode m; juce::TextButton* b; };
-    Pair pairs[] = {
-        {PlayMode::FireStop,  &modeFireStop},
-        {PlayMode::PlayEnd,   &modePlayEnd},
-        {PlayMode::Momentary, &modeMomentary},
-        {PlayMode::LoopFire,  &modeLoopFire},
-        {PlayMode::Restart,   &modeRestart},
-    };
-    for (auto& p : pairs)
-    {
-        const bool active = (p.m == playMode);
-        p.b->setColour (juce::TextButton::buttonColourId,
-                        active ? juce::Colour(0xffeff6ec) : C::BTN_FACE);
-        p.b->setColour (juce::TextButton::textColourOffId,
-                        active ? juce::Colour (0xff238a53) : C::TEXT_DIM);
-    }
-}
-
-void MainComponent::updateSlotControls()
-{
-    if (selectedKey < 0) return;
-    const auto& slot = currentSlotForKey(selectedKey);
-    gainSlider.setValue    (slot.gain,    juce::dontSendNotification);
-    trimInSlider.setValue  (slot.trimIn,  juce::dontSendNotification);
-    trimOutSlider.setValue (slot.trimOut, juce::dontSendNotification);
-}
-
 void MainComponent::highlightTransport()
 {
     btnLoop.setColour (juce::TextButton::buttonColourId,
-                       loopAll ? juce::Colour(0xfffff2db) : C::BTN_FACE);
-    btnLoop.setColour (juce::TextButton::textColourOffId,
-                       loopAll ? juce::Colour (0xffba7a00) : C::TEXT_MAIN);
+                       loopAll ? juce::Colour (0xff2a5a7a) : C::BTN_FACE);
 }
 
 void MainComponent::setStatus (const juce::String& msg)
