@@ -1,0 +1,394 @@
+/* ============================================================
+   INSTANT REPLAY 3 — hardware-faithful broadcast cart machine
+   Green anodized chassis · brushed deck · rubber hot-keys
+   ============================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* themable (overridden on .device by React) */
+  --swoosh: #e23b2e;
+  --swoosh-2: #b3160f;
+
+  /* anodized green chassis */
+  --chassis-hi: #1f9c63;
+  --chassis-1:  #137a4c;
+  --chassis-2:  #0d5d3a;
+  --chassis-3:  #08412a;
+  --chassis-edge: #042016;
+
+  /* brushed silver top deck */
+  --deck-hi: #f1f3f4;
+  --deck-1:  #d4d9dc;
+  --deck-2:  #b3bbc0;
+  --deck-3:  #8c9499;
+
+  /* keypad/console plastic */
+  --pad-face: #1c4a39;
+  --pad-face-2: #14382b;
+  --pad-edge: #0a241b;
+  --pad-ink: #e7f4ee;
+
+  /* LCD (green default) */
+  --lcd-bg:  #02160c;
+  --lcd-bg2: #04230f;
+  --lcd-ink: #54ff9e;
+  --lcd-dim: #1f7a47;
+  --lcd-grid: rgba(84,255,158,.10);
+  --lcd-glow: rgba(84,255,158,.35);
+
+  --key-red: #cf2a24;
+  font-synthesis: none;
+}
+
+html, body { height: 100%; }
+body {
+  background:
+    radial-gradient(120% 90% at 50% 0%, #15201b 0%, #0a100d 55%, #050806 100%);
+  font-family: "Barlow Semi Condensed", "Helvetica Neue", Arial, sans-serif;
+  color: #fff;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- scaling stage ---- */
+.stage { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.device-wrap { width: 1600px; height: 900px; transform-origin: center center; }
+
+/* ============================================================
+   DEVICE CHASSIS
+   ============================================================ */
+.device {
+  position: relative;
+  width: 1600px; height: 900px;
+  border-radius: 26px;
+  padding: 22px;
+  display: flex; flex-direction: column;
+  background:
+    linear-gradient(180deg, var(--chassis-hi) 0%, var(--chassis-1) 8%, var(--chassis-2) 60%, var(--chassis-3) 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.28),
+    inset 0 -3px 6px rgba(0,0,0,.45),
+    inset 0 0 0 2px var(--chassis-edge),
+    0 40px 90px rgba(0,0,0,.65),
+    0 8px 24px rgba(0,0,0,.5);
+  overflow: hidden;
+}
+/* anodized brushed sheen */
+.device::before {
+  content: ""; position: absolute; inset: 0; border-radius: 26px; pointer-events: none;
+  background:
+    repeating-linear-gradient(92deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+    radial-gradient(140% 60% at 20% -10%, rgba(255,255,255,.18), transparent 45%);
+  mix-blend-mode: screen; opacity: .8;
+}
+/* corner screws */
+.screw { position: absolute; width: 13px; height: 13px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #e9eef0, #9aa2a6 55%, #4f5559 100%);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.5); z-index: 5; }
+.screw::after { content:""; position:absolute; inset:3px; border-top:1.5px solid rgba(0,0,0,.45); transform: rotate(28deg); }
+.screw.tl{ top:9px; left:9px } .screw.tr{ top:9px; right:9px }
+.screw.bl{ bottom:9px; left:9px } .screw.br{ bottom:9px; right:9px }
+
+/* ---- TOP DECK (brushed silver header) ---- */
+.deck-top {
+  position: relative; height: 96px; flex: 0 0 96px;
+  border-radius: 14px; margin-bottom: 16px; overflow: hidden;
+  background: linear-gradient(180deg, var(--deck-hi), var(--deck-1) 45%, var(--deck-2) 100%);
+  box-shadow: inset 0 1px 0 #fff, inset 0 -2px 5px rgba(0,0,0,.28), 0 2px 4px rgba(0,0,0,.35);
+  display: flex; align-items: center; padding: 0 26px;
+}
+.deck-top::before { /* brushed metal lines */
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.5) 0 1px, transparent 1px 3px),
+              repeating-linear-gradient(90deg, rgba(0,0,0,.04) 0 2px, transparent 2px 5px);
+  opacity:.5;
+}
+/* the swoosh */
+.swoosh { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; pointer-events:none; }
+.brand { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 2px; }
+.brand .maker { font: 700 13px/1 "Barlow Semi Condensed", sans-serif; letter-spacing: .28em;
+  color: #2b6db0; text-transform: uppercase; }
+.brand .model { font: 800 italic 30px/.9 "Saira Condensed","Barlow Semi Condensed",sans-serif;
+  letter-spacing: .01em; color: #15314e; text-transform: uppercase; white-space: nowrap;
+  display: inline-flex; align-items: baseline; gap: 9px; }
+.brand .model b { color: var(--swoosh); font-style: italic; font-weight: 800; }
+.brand .model .three {
+  font-size: 36px; color: var(--swoosh); -webkit-text-stroke: 0;
+  text-shadow: 1px 2px 0 var(--swoosh-2); margin-left: 2px; }
+.deck-status { margin-left: auto; position: relative; z-index: 2; text-align: right; }
+.deck-status .clk { font: 600 26px/1 "JetBrains Mono", monospace; color: #16314e; letter-spacing: .04em; }
+.deck-status .sub { font: 600 11px/1 "Barlow Semi Condensed",sans-serif; letter-spacing:.22em; color:#5b6b78; margin-top:5px; white-space:nowrap; }
+
+/* ---- BODY GRID ---- */
+.body { flex: 1; display: grid; grid-template-columns: 1fr 540px 116px; gap: 16px; min-height: 0; }
+
+/* ============================================================
+   HOT-KEY DECK (left)
+   ============================================================ */
+.deck { display: flex; flex-direction: column; min-height: 0; }
+.bankbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.bankbar .lbl { font: 700 12px/1 "Barlow Semi Condensed"; letter-spacing:.22em; color: rgba(255,255,255,.62); margin-right: 4px; }
+.banktab {
+  flex: 0 0 auto; min-width: 58px; padding: 8px 14px; border: 0; cursor: pointer;
+  border-radius: 8px 8px 0 0; font: 800 15px/1 "Barlow Semi Condensed"; letter-spacing:.1em;
+  color: rgba(255,255,255,.7);
+  background: linear-gradient(180deg, var(--pad-face), var(--pad-face-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 3px rgba(0,0,0,.35);
+  transition: .12s;
+}
+.banktab .ct { display:block; font: 600 10px/1 "JetBrains Mono"; color: rgba(255,255,255,.4); margin-top:3px; }
+.banktab.active { color: #04140c; background: linear-gradient(180deg, #eafff4, var(--lcd-ink));
+  box-shadow: inset 0 1px 0 #fff, 0 0 18px var(--lcd-glow); }
+.banktab.active .ct { color: rgba(0,40,20,.7); }
+
+.keygrid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(10, 1fr); grid-auto-rows: 1fr; gap: 8px;
+}
+
+/* a hot key */
+.key {
+  position: relative; border-radius: 9px; cursor: pointer; overflow: hidden;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f4f5 42%, #dfe2e5 100%);
+  box-shadow:
+    inset 0 1.5px 0 #fff,
+    inset 0 -3px 5px rgba(0,0,0,.16),
+    inset 0 0 0 1px rgba(0,0,0,.16),
+    0 3px 4px rgba(0,0,0,.4);
+  transition: transform .06s, box-shadow .12s;
+  user-select: none;
+}
+.key::before { /* rubber gloss */
+  content:""; position:absolute; left:6%; right:6%; top:4%; height:34%;
+  border-radius: 50%/70%; background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,0));
+  pointer-events:none;
+}
+.key:active { transform: translateY(2px); box-shadow: inset 0 2px 6px rgba(0,0,0,.3), inset 0 0 0 1px rgba(0,0,0,.2); }
+
+.key .slot { position: absolute; left: 7px; bottom: 5px; font: 800 17px/1 "Barlow Semi Condensed";
+  color: var(--key-red); z-index: 3; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
+.key .kc { position: absolute; right: 7px; top: 5px; font: 700 11px/1 "Barlow Semi Condensed";
+  color: #8a9097; letter-spacing: .02em; z-index: 3; text-transform: uppercase; }
+.key .wav { position: absolute; left: 5px; right: 5px; top: 22px; bottom: 22px; z-index: 1; opacity: .92; }
+.key .name { position: absolute; left: 6px; right: 6px; bottom: 22px; z-index: 3;
+  font: 700 10px/1.05 "Barlow Semi Condensed"; color: #1d2226; text-transform: uppercase;
+  letter-spacing: .01em; text-align: left; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.key .tag { position: absolute; left: 0; right: 0; top: 0; height: 5px; z-index: 2; background: var(--tag, #888); }
+.key .led { position: absolute; right: 7px; bottom: 7px; width: 9px; height: 9px; border-radius:50%;
+  background: #cfd4d8; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); z-index: 4; }
+
+/* empty */
+.key.empty { background: linear-gradient(180deg,#f7f8f9,#e3e6e8); }
+.key.empty::after { content:""; position:absolute; inset:7px; border:1.5px dashed rgba(0,0,0,.14); border-radius:6px; }
+
+/* loaded idle */
+.key.loaded .led { background: radial-gradient(circle at 35% 30%, #fff, var(--tag) 60%, color-mix(in srgb, var(--tag) 60%, #000) 100%); }
+
+/* selected / focused */
+.key.selected { box-shadow:
+  inset 0 1.5px 0 #fff, inset 0 -3px 5px rgba(0,0,0,.16),
+  0 0 0 3px var(--lcd-ink), 0 0 18px var(--lcd-glow), 0 3px 4px rgba(0,0,0,.4); }
+
+/* cued / next */
+.key.cued { box-shadow:
+  inset 0 1.5px 0 #fff, inset 0 -3px 5px rgba(0,0,0,.16),
+  0 0 0 3px #ffb454, 0 0 16px rgba(255,180,84,.5), 0 3px 4px rgba(0,0,0,.4); }
+.key.cued .nx { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:5;
+  font:800 9px/1 "Barlow Semi Condensed"; letter-spacing:.12em; color:#7a4d00;
+  background:#ffb454; padding:3px 5px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+
+/* playing */
+.key.playing { background: linear-gradient(180deg, #ffffff, #eafff4 60%, #c9f5dd 100%); }
+.key.playing .prog { position:absolute; left:0; bottom:0; top:0; width:0%; z-index:2;
+  background: linear-gradient(180deg, color-mix(in srgb,var(--lcd-ink) 28%, transparent), color-mix(in srgb,var(--lcd-ink) 55%, transparent));
+  border-right: 2px solid var(--lcd-ink); }
+.key.playing .led { background: var(--lcd-ink); box-shadow: 0 0 10px var(--lcd-ink); animation: blip .5s steps(2) infinite; }
+@keyframes blip { 50% { opacity:.35 } }
+
+/* recording */
+.key.rec { background: linear-gradient(180deg,#fff,#ffe6e3 60%,#ffc4bd 100%); }
+.key.rec .led { background:#ff3b30; box-shadow:0 0 12px #ff3b30; animation: blip .45s steps(2) infinite; }
+.key.rec .name { color:#a01510; }
+
+/* bottom hot-key row */
+.deck-bottom { display: grid; grid-template-columns: 88px 1fr 1fr; gap: 12px; margin-top: 12px; flex: 0 0 56px; align-items: stretch; }
+.hk-label { display:flex; align-items:center; font:800 12px/1.1 "Barlow Semi Condensed"; letter-spacing:.16em; color:rgba(255,255,255,.66);
+  border-top: 2px solid var(--swoosh); padding-top:6px; }
+.bigbtn {
+  border:0; cursor:pointer; border-radius: 10px; color:#eaf6ef;
+  font: 800 17px/1 "Barlow Semi Condensed"; letter-spacing:.12em;
+  background: linear-gradient(180deg, var(--pad-face), var(--pad-face-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 5px rgba(0,0,0,.3), 0 3px 5px rgba(0,0,0,.4);
+  display:flex; align-items:center; justify-content:center; gap:8px; transition:.1s;
+}
+.bigbtn small { font-weight:600; font-size:10px; letter-spacing:.1em; opacity:.6; }
+.bigbtn:active { transform: translateY(2px); }
+.bigbtn.on { background: linear-gradient(180deg,#2ec27e,#0f7a47); color:#03140b; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 0 18px rgba(46,194,126,.5); }
+
+/* ============================================================
+   CONSOLE (center column): LCD + keypad + transport
+   ============================================================ */
+.console { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+
+/* LCD */
+.lcd {
+  position: relative; height: 224px; flex: 0 0 224px; border-radius: 10px; overflow: hidden;
+  background: linear-gradient(180deg, var(--lcd-bg), var(--lcd-bg2));
+  box-shadow: inset 0 0 0 3px #060d0a, inset 0 0 40px rgba(0,0,0,.7), 0 0 0 4px #0c2c1d, 0 3px 6px rgba(0,0,0,.5);
+  padding: 12px 14px; color: var(--lcd-ink); font-family: "JetBrains Mono", monospace;
+}
+.lcd::after { content:""; position:absolute; inset:0; pointer-events:none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px); opacity:.5; }
+.lcd .scan { position:absolute; inset:0; pointer-events:none;
+  background: radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,.05), transparent 60%); }
+.lcd-row1 { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; letter-spacing:.12em; color: var(--lcd-dim); }
+.lcd-row1 b { color: var(--lcd-ink); }
+.lcd-clip { margin-top: 8px; font-size: 22px; font-weight: 700; letter-spacing:.02em; text-shadow: 0 0 8px var(--lcd-glow);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lcd-clip.empty { color: var(--lcd-dim); text-shadow:none; }
+.lcd-time { display:flex; justify-content:space-between; font-size:15px; margin-top:4px; color: var(--lcd-ink); }
+.lcd-time .rem { color: var(--lcd-dim); }
+.lcd-wav { position: relative; height: 92px; margin-top: 8px; border-top:1px solid var(--lcd-grid); }
+.lcd-wav canvas { width:100%; height:100%; display:block; }
+.lcd-flags { position:absolute; right:12px; bottom:8px; display:flex; gap:6px; font-size:11px; letter-spacing:.1em; }
+.lcd-flag { padding:2px 6px; border-radius:3px; border:1px solid var(--lcd-dim); color:var(--lcd-dim); }
+.lcd-flag.on { background: var(--lcd-ink); color:#04140c; border-color:var(--lcd-ink); box-shadow:0 0 10px var(--lcd-glow); }
+
+/* soft keys */
+.softrow { display:grid; grid-template-columns: repeat(5,1fr); gap:8px; flex:0 0 auto; }
+.kbtn {
+  border:0; cursor:pointer; border-radius:8px; color: var(--pad-ink);
+  background: linear-gradient(180deg, var(--pad-face), var(--pad-face-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), inset 0 -2px 4px rgba(0,0,0,.34), 0 2px 4px rgba(0,0,0,.4);
+  font: 700 13px/1.05 "Barlow Semi Condensed"; letter-spacing:.06em; text-transform:uppercase;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; transition:.08s; padding:6px 4px;
+}
+.kbtn small { font-size:9px; font-weight:600; opacity:.6; letter-spacing:.08em; }
+.kbtn:active { transform: translateY(2px); box-shadow: inset 0 2px 5px rgba(0,0,0,.4); }
+.kbtn.soft { height:38px; font-family:"JetBrains Mono"; font-size:12px; }
+.kbtn.on { background: linear-gradient(180deg,#eafff4,var(--lcd-ink)); color:#04140c; box-shadow:0 0 16px var(--lcd-glow); }
+
+/* enter + power */
+.enterrow { display:grid; grid-template-columns: 1fr 64px; gap:8px; flex:0 0 auto; }
+.kbtn.enter { height:44px; font-size:16px; letter-spacing:.16em; }
+.power { display:grid; place-items:center; }
+.power .pwr { width:42px; height:42px; border-radius:50%; border:0; cursor:pointer;
+  background: radial-gradient(circle at 38% 32%, #2a5e49, #11362a 70%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 2px 4px rgba(0,0,0,.4); color: var(--lcd-ink); font-size:18px;
+  display:grid; place-items:center; }
+.power .pwr .dot { width:9px;height:9px;border-radius:50%;background:var(--lcd-ink);box-shadow:0 0 8px var(--lcd-glow); }
+
+/* keypad cluster */
+.keypad { flex:1; min-height:0; display:grid; grid-template-columns: repeat(6,1fr); grid-auto-rows:1fr; gap:8px; }
+.keypad .kbtn { height:auto; }
+.keypad .arrow { font-size:18px; }
+
+/* transport */
+.transport { display:grid; grid-template-columns: repeat(5,1fr); gap:10px; flex:0 0 60px; }
+.tbtn {
+  border:0; cursor:pointer; border-radius:10px; color:#eaf6ef;
+  font: 800 14px/1 "Barlow Semi Condensed"; letter-spacing:.08em;
+  background: linear-gradient(180deg, var(--pad-face), var(--pad-face-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 5px rgba(0,0,0,.32), 0 3px 5px rgba(0,0,0,.45);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; transition:.08s;
+}
+.tbtn .ic { font-size:16px; line-height:1; }
+.tbtn:active { transform: translateY(2px); }
+.tbtn.play { background: linear-gradient(180deg,#34cc84,#0f7a47); color:#04140c; }
+.tbtn.play.on { box-shadow: 0 0 22px rgba(52,204,132,.6), inset 0 1px 0 rgba(255,255,255,.4); }
+.tbtn.rec { background: linear-gradient(180deg,#5a1714,#3a0d0b); color:#ffb3ad; }
+.tbtn.rec.on { background: linear-gradient(180deg,#ff4136,#b3160f); color:#fff; box-shadow:0 0 22px rgba(255,65,54,.6); animation:blip .5s steps(2) infinite; }
+.transport .lab { grid-column:1/-1; font:700 10px/1 "Barlow Semi Condensed"; letter-spacing:.22em; color:rgba(255,255,255,.45); }
+
+/* ============================================================
+   RIGHT RAIL: meters + knobs
+   ============================================================ */
+.rail { display:flex; flex-direction:column; align-items:center; gap:14px; padding-top:2px; }
+.rail .cap { font:700 9px/1 "Barlow Semi Condensed"; letter-spacing:.18em; color:rgba(255,255,255,.55); text-align:center; }
+.meters { display:flex; gap:8px; height:300px; }
+.meter { position:relative; width:18px; border-radius:4px; overflow:hidden;
+  background: linear-gradient(180deg,#06170f,#03100a); box-shadow: inset 0 0 0 1px rgba(0,0,0,.6), inset 0 0 8px rgba(0,0,0,.7); }
+.meter .fill { position:absolute; left:0; right:0; bottom:0; height:0%;
+  background: linear-gradient(0deg, #2ec27e 0%, #8fe34a 55%, #ffd23f 78%, #ff6b3d 90%, #ff3b30 100%); }
+.meter .mask { position:absolute; inset:0; pointer-events:none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.55) 0 2px, transparent 2px 5px); }
+.meter .peak { position:absolute; left:0; right:0; height:2px; background:#fff; bottom:0; box-shadow:0 0 6px #fff; }
+.meter-scale { display:flex; flex-direction:column; justify-content:space-between; height:300px; font:600 8px/1 "JetBrains Mono"; color:rgba(255,255,255,.4); }
+.mlbl { display:flex; gap:10px; font:700 9px/1 "Barlow Semi Condensed"; letter-spacing:.1em; color:rgba(255,255,255,.5); }
+
+.knob { width:54px; height:54px; border-radius:50%; cursor:ns-resize; position:relative;
+  background: radial-gradient(circle at 38% 30%, #2b5e49, #0e3326 72%, #06231a 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.18), inset 0 -3px 6px rgba(0,0,0,.5), 0 3px 5px rgba(0,0,0,.45); }
+.knob::after { content:""; position:absolute; left:50%; top:7px; width:3px; height:16px; border-radius:2px;
+  background: var(--lcd-ink); transform-origin:50% 20px; transform: translateX(-50%) rotate(var(--rot,0deg)); box-shadow:0 0 6px var(--lcd-glow); }
+.knob-wrap { display:flex; flex-direction:column; align-items:center; gap:3px; }
+.knob-dial { position:relative; width:86px; height:66px; display:flex; align-items:flex-start; justify-content:center; }
+.knob-dial .knob { margin-top:8px; }
+.ktick { position:absolute; font:600 8px/1 "JetBrains Mono"; color:rgba(255,255,255,.45); letter-spacing:.02em; pointer-events:none; }
+.ktick.kmin { left:0; bottom:4px; }
+.ktick.kmid { top:0; left:50%; transform:translateX(-50%); }
+.ktick.kmax { right:0; bottom:4px; }
+.kval { min-width:38px; text-align:center; font:700 11px/1 "JetBrains Mono"; color:var(--lcd-ink);
+  letter-spacing:.04em; padding:1px 4px; border-radius:3px; background:rgba(0,0,0,.35);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); text-shadow:0 0 6px var(--lcd-glow); }
+
+/* status bar */
+.statusbar { position:absolute; left:22px; right:22px; bottom:6px; display:flex; justify-content:space-between; align-items:center;
+  font:600 11px/1 "JetBrains Mono"; color:rgba(255,255,255,.5); letter-spacing:.04em; z-index:4; padding-top:6px; }
+.statusbar .play-ct b { color: var(--lcd-ink); }
+
+/* drag-over highlight */
+.key.dragover { box-shadow: 0 0 0 3px var(--lcd-ink), 0 0 22px var(--lcd-glow) !important; transform: scale(1.04); }
+
+/* ============================================================
+   SOFTWARE FINISH  (flat modern app, same layout)
+   ============================================================ */
+.device.finish-software {
+  border-radius: 16px; padding: 18px; background: #0e1512;
+  box-shadow: inset 0 0 0 1px #1d2a24, 0 30px 80px rgba(0,0,0,.6);
+}
+.device.finish-software::before { display:none; }
+.device.finish-software .screw { display:none; }
+.device.finish-software .deck-top {
+  background: #121b17; box-shadow: inset 0 0 0 1px #223029; border-radius: 10px; }
+.device.finish-software .deck-top::before { display:none; }
+.device.finish-software .brand .maker { color: var(--lcd-ink); }
+.device.finish-software .brand .model { color:#e9f1ec; }
+.device.finish-software .brand .model .three { -webkit-text-stroke: 0; color: var(--swoosh); text-shadow:none; }
+.device.finish-software .deck-status .clk { color:#cfe9da; }
+.device.finish-software .key {
+  background: #1a2520; border-radius:10px;
+  box-shadow: inset 0 0 0 1px #2a3a32; }
+.device.finish-software .key::before { display:none; }
+.device.finish-software .key .slot { color: var(--swoosh); text-shadow:none; }
+.device.finish-software .key .kc { color:#5d7066; }
+.device.finish-software .key .name { color:#dfe9e3; }
+.device.finish-software .key.empty { background:#141d19; }
+.device.finish-software .key.empty::after { border-color: rgba(255,255,255,.08); }
+.device.finish-software .key.playing { background:#10261b; box-shadow: inset 0 0 0 1px var(--lcd-ink); }
+.device.finish-software .key.rec { background:#2a1413; box-shadow: inset 0 0 0 1px #ff4136; }
+.device.finish-software .banktab,
+.device.finish-software .kbtn,
+.device.finish-software .tbtn,
+.device.finish-software .bigbtn { background:#1a2520; box-shadow: inset 0 0 0 1px #2a3a32; }
+.device.finish-software .kbtn.on,
+.device.finish-software .banktab.active { background: var(--lcd-ink); color:#04140c; box-shadow:none; }
+.device.finish-software .tbtn.play { background:#0f7a47; }
+.device.finish-software .tbtn.rec.on { background:#b3160f; }
+.device.finish-software .knob { background: radial-gradient(circle at 40% 32%, #243029, #121a16); }
+
+/* context menu */
+.keymenu { width: 192px; border-radius: 10px; overflow: hidden; padding: 5px;
+  background: linear-gradient(180deg, #16221c, #0e1813);
+  box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.08); }
+.keymenu-h { font: 700 11px/1.2 "Barlow Semi Condensed"; letter-spacing:.1em; text-transform:uppercase;
+  color: var(--lcd-ink); padding: 7px 9px 8px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 4px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.keymenu button { display:block; width:100%; text-align:left; border:0; cursor:pointer; background:transparent;
+  color:#dfe9e3; font: 600 13px/1 "Barlow Semi Condensed"; letter-spacing:.02em; padding: 9px 9px; border-radius:6px; }
+.keymenu button:hover { background: rgba(84,255,158,.14); color:#fff; }
+
+/* fonts loading flash guard */
+.lcd, .key .slot, .clk { font-display: swap; }
