@@ -78,3 +78,6 @@ clips/
 # ── Secrets / local config ────────────────────────────────
 .env
 *.local
+
+# Claude Code local config
+.claude/

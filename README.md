@@ -1,8 +1,8 @@
-# Shortcut Pro — Weird Al Universe Edition
+# Shortcut Pro — Broadcast Audio Editor
 
 A professional broadcast-grade soundboard modeled on the **360 Systems Shortcut** cart machine, built with JUCE C++ for low-latency audio playback.
 
-**188 assignable slots** across a full QWERTY keyboard layout and 4 banks — pre-labeled with deep cuts from the Weird Al universe: UHF film, VHS rarities, Al TV interviews, song hooks, and specialty clips.
+**188 assignable slots** across a full QWERTY keyboard layout and 4 banks — pre-labeled with generic broadcast-ready cues, stings, beds, IDs, and utility cuts.
 
 A web prototype (`index.html`) is also included for quick previewing in a browser.
 
@@ -115,10 +115,10 @@ Without ASIO the app uses **WASAPI Exclusive** (~10–20ms) or **DirectSound** (
 
 | Bank | Theme |
 |------|-------|
-| **A** | UHF film / VHS — "No Stinking Badgers", Spatula City, Gandhi II, Wheel of Fish… |
-| **B** | Classic song hooks — Eat It, Fat, Amish Paradise, White & Nerdy, Albuquerque… |
-| **C** | Al TV interviews, deep cuts, tour diaries, bonus VHS content |
-| **D** | Specialty / rarities — Weasel Stomping Day, Foil, Virus Alert, Zelda Polka… |
+| **A** | Imaging / opens / IDs / stagers |
+| **B** | Beds / hooks / bumpers / promos |
+| **C** | Interviews / actuality / production elements |
+| **D** | Comedy / specialty / utility / FX |
 
 All slot names are pre-labeled and fully renameable.
 

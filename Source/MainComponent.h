@@ -5,6 +5,7 @@
 #include "KeyboardComponent.h"
 #include "VUMeterComponent.h"
 #include "WaveformDisplay.h"
+#include "AtomicLookAndFeel.h"
 #include <array>
 #include <optional>
 #include <set>
@@ -30,6 +31,9 @@ public:
     void timerCallback() override;
 
 private:
+    // ── Look and feel ────────────────────────────────────
+    AtomicLookAndFeel atomicLF;
+
     // ── Audio ────────────────────────────────────────────
     AudioEngine engine;
 

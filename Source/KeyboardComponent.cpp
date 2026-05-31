@@ -1,5 +1,16 @@
 #include "KeyboardComponent.h"
 
+// ── Per-clip colour tag (stable, derived from key index) ──
+// Mirrors the IR3 web design TAGS palette.
+static juce::Colour tagColour (int idx)
+{
+    static const juce::uint32 TAGS[] = {
+        0xffe23b2e, 0xffffb454, 0xff54ff9e, 0xff62b6ff, 0xffc77dff,
+        0xffff6fa5, 0xff4dd0c4, 0xfff7d046, 0xff7bd45a, 0xffff8a3d
+    };
+    return juce::Colour (TAGS[((idx % 10) + 10) % 10]);
+}
+
 // ── Display chars ─────────────────────────────────────────
 juce::String KeyboardComponent::keyDisplayChar (int idx)
 {
@@ -126,15 +137,15 @@ int KeyboardComponent::keyIndexAt (int x, int y) const
 // ── Painting ─────────────────────────────────────────────
 void KeyboardComponent::paint (juce::Graphics& g)
 {
-    // IR2-style light gray background
-    g.fillAll (juce::Colour (0xffe4e8ec));
+    // Chassis green behind the keys (gaps read as green like the web design)
+    g.fillAll (juce::Colour (0xff0a594f));
 
     // Draw all keys
     for (int i = 0; i < NUM_KEYS; ++i)
         paintKey (g, cells[i]);
 
     // "HOT-KEYS" label at bottom-left
-    g.setColour (juce::Colour (0xff1e3a5f));
+    g.setColour (juce::Colour (0xffa9c6bd));
     g.setFont (juce::Font ("Courier New", 11.0f, juce::Font::bold));
     g.drawText ("HOT-KEYS",
                 MARGIN, getHeight() - LABEL_H + 2,
@@ -194,10 +205,15 @@ void KeyboardComponent::paintKey (juce::Graphics& g, const KeyCell& cell)
     juce::Colour borderCol;
     if      (dragOver)  borderCol = juce::Colour (0xffffaa00);
     else if (playing)   borderCol = juce::Colour (0xff1fb86d);
-    else if (selected)  borderCol = juce::Colour (0xff4a79be);
+    else if (selected)  borderCol = juce::Colour (0xff62b6ff);   // LCD ink
     else                borderCol = juce::Colour (0xffb0b8c0);
+    if (selected)   // glow ring
+    {
+        g.setColour (juce::Colour (0xff62b6ff).withAlpha (0.35f));
+        g.drawRoundedRectangle (r.toFloat().expanded (1.5f), 6.0f, 3.0f);
+    }
     g.setColour (borderCol);
-    g.drawRoundedRectangle (r.toFloat(), 5.0f, playing || selected ? 1.5f : 1.0f);
+    g.drawRoundedRectangle (r.toFloat(), 5.0f, playing || selected ? 2.0f : 1.0f);
 
     // Drop shadow strip below key
     g.setColour (juce::Colour (0x20000000));
@@ -236,13 +252,23 @@ void KeyboardComponent::paintKey (juce::Graphics& g, const KeyCell& cell)
         }
     }
 
-    // LED strip at top (3px)
+    // Colour-tag strip at top (4px) — per-clip tag when loaded
+    juce::Colour tag = tagColour (cell.keyIndex);
     juce::Colour ledCol;
     if      (playing)  ledCol = juce::Colour (0xff00ff44);
-    else if (loaded)   ledCol = juce::Colour (0xffffaa44);
-    else               ledCol = juce::Colour (0xff2a3038);
+    else if (loaded)   ledCol = tag;
+    else               ledCol = juce::Colour (0xff223028);
     g.setColour (ledCol);
-    g.fillRect (r.getX(), r.getY(), r.getWidth(), 3);
+    g.fillRect (r.getX(), r.getY(), r.getWidth(), 4);
+
+    // LED dot bottom-right
+    {
+        const float d = 6.0f;
+        const float lx = r.getRight() - d - 5.0f, ly = r.getBottom() - d - 5.0f;
+        g.setColour (playing ? juce::Colour (0xff00ff44)
+                             : (loaded ? tag : juce::Colour (0x33000000)));
+        g.fillEllipse (lx, ly, d, d);
+    }
 
     // Mini waveform (subtle, in center area)
     if (loaded && !slot.waveformPeaks.empty())
@@ -253,8 +279,8 @@ void KeyboardComponent::paintKey (juce::Graphics& g, const KeyCell& cell)
         const int waveW    = r.getWidth();
         const auto& peaks  = slot.waveformPeaks;
         const int count    = (int)peaks.size();
-        const float opacity = playing ? 0.85f : 0.4f;
-        g.setColour (juce::Colour(0xffe8283a).withAlpha (opacity));
+        const float opacity = playing ? 0.9f : 0.5f;
+        g.setColour (tagColour (cell.keyIndex).withAlpha (opacity));
         for (int x = 0; x < waveW; ++x)
         {
             const int idx = juce::jlimit (0, count - 1, (int)((float)x / waveW * count));
@@ -273,7 +299,7 @@ void KeyboardComponent::paintKey (juce::Graphics& g, const KeyCell& cell)
     // Slot number — small, top-left of label strip
     const float numFontSize = 11.0f;
     g.setFont (juce::Font ("Courier New", numFontSize, juce::Font::bold));
-    g.setColour (juce::Colour (0xffe8283a));
+    g.setColour (juce::Colour (0xff7a8690));
     g.drawText (juce::String (cell.keyIndex + 1),
                 r.getX() + 3, labelY + 1, 24, 12,
                 juce::Justification::topLeft, false);

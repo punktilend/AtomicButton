@@ -30,11 +30,11 @@ void VUMeterComponent::paint (juce::Graphics& g)
     const int W = getWidth();
     const int H = getHeight();
 
-    g.fillAll (juce::Colour (0xff0a0a0a));
+    g.fillAll (juce::Colour (0xff06170f));
 
     // Label
     g.setFont (juce::Font ("Courier New", 9.0f, juce::Font::plain));
-    g.setColour (juce::Colour (0xff778899));
+    g.setColour (juce::Colour (0xff8fb3a6));
     g.drawText (channelLabel, 0, H - 12, W, 12, juce::Justification::centred);
 
     const int meterH   = H - 16;
@@ -72,7 +72,7 @@ void VUMeterComponent::paint (juce::Graphics& g)
         }
         else
         {
-            g.setColour (juce::Colour (0xff111111));
+            g.setColour (juce::Colour (0xff0c1f17));
             g.fillRoundedRectangle (segRect.toFloat(), 1.0f);
         }
     }

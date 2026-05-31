@@ -4,27 +4,56 @@
 // ── Colour palette ────────────────────────────────────────
 namespace C
 {
-    static const juce::Colour ROOM        (0xff0a0a0b);
-    static const juce::Colour CHASSIS     (0xffe4e8ec);   // IR2 light gray
-    static const juce::Colour CHASSIS_DRK (0xffb8c0ca);
-    static const juce::Colour PANEL_BLUE  (0xff3d5878);   // IR2 steel blue
-    static const juce::Colour PANEL_BLUE_DRK (0xff2d4464);
-    static const juce::Colour RAIL        (0xffcfd5da);
-    static const juce::Colour BEVEL       (0xfff3f5f7);
-    static const juce::Colour SCREW       (0xff7e8794);
-    static const juce::Colour LCD_FRAME   (0xff2a3a4a);
+    // ── Atomic Button — Teal anodized chassis + blue LCD (matches web IR3 design) ──
+    static const juce::Colour ROOM        (0xff05100c);   // room behind the unit
+
+    // Chassis gradient stops (top→bottom)
+    static const juce::Colour CHASSIS_HI  (0xff159c8a);
+    static const juce::Colour CHASSIS_C1  (0xff0d7568);
+    static const juce::Colour CHASSIS_C2  (0xff0a594f);
+    static const juce::Colour CHASSIS_C3  (0xff063b34);
+    static const juce::Colour CHASSIS_EDGE(0xff03201c);
+    static const juce::Colour CHASSIS     (0xff0d7568);   // base mid green
+    static const juce::Colour CHASSIS_DRK (0xff063b34);
+
+    // Darker recessed panel (repurposed names kept for paint() compatibility)
+    static const juce::Colour PANEL_BLUE  (0xff0a594f);   // was steel blue — now dark green panel
+    static const juce::Colour PANEL_BLUE_DRK (0xff063b34);
+
+    // Brushed-metal top deck strip + thin bevel
+    static const juce::Colour DECK_HI     (0xffeef1f2);
+    static const juce::Colour DECK_LO     (0xffcfd5d8);
+    static const juce::Colour RAIL        (0xffe8edee);   // brushed silver deck
+    static const juce::Colour BEVEL       (0xff3fc9a6);
+    static const juce::Colour SCREW       (0xff9aa2a6);
+
+    // Swoosh accent + branding inks
+    static const juce::Colour SWOOSH      (0xff2ec27e);
+    static const juce::Colour SWOOSH_DK   (0xff1c7a4e);
+    static const juce::Colour BRAND_BLUE  (0xff2b6db0);
+    static const juce::Colour BRAND_DARK  (0xff0b2b22);
+
+    // Status LEDs
     static const juce::Colour LED_GREEN   (0xff00ff44);
     static const juce::Colour LED_AMBER   (0xffffaa00);
     static const juce::Colour LED_RED     (0xffff2233);
-    static const juce::Colour LCD_BG      (0xff020406);
-    static const juce::Colour LCD_TEXT    (0xff35c6ff);
-    static const juce::Colour LCD_DIM     (0xff6ca7c2);
-    static const juce::Colour TEXT_MAIN   (0xffe8eef4);
-    static const juce::Colour TEXT_DIM    (0xffa0b4c8);
-    static const juce::Colour BTN_FACE    (0xff4a6a8a);
-    static const juce::Colour BTN_TOP     (0xff5a7a9a);
-    static const juce::Colour BTN_LABEL   (0xffe8eef4);
-    static const juce::Colour METER_BG    (0xff2a3848);
+
+    // Blue LCD
+    static const juce::Colour LCD_BG      (0xff02101a);
+    static const juce::Colour LCD_FRAME   (0xff0a3a4a);
+    static const juce::Colour LCD_TEXT    (0xff62b6ff);
+    static const juce::Colour LCD_DIM     (0xff1f6f9a);
+
+    // Text on green chassis
+    static const juce::Colour TEXT_MAIN   (0xffe8f1ec);
+    static const juce::Colour TEXT_DIM    (0xffa9c6bd);
+
+    // Pad buttons
+    static const juce::Colour BTN_FACE    (0xff0e3326);
+    static const juce::Colour BTN_TOP     (0xff134a35);
+    static const juce::Colour BTN_LABEL   (0xffeaf6ef);
+
+    static const juce::Colour METER_BG    (0xff06170f);
 }
 
 static juce::Font monoFont (float size, int style = juce::Font::plain)
@@ -35,7 +64,7 @@ static juce::Font monoFont (float size, int style = juce::Font::plain)
 // ── Construction ──────────────────────────────────────────
 MainComponent::MainComponent()
 {
-    setSize (1280, 860);
+    setSize (1480, 1010);
 
     initSlots();
     engine.initialise();
@@ -100,19 +129,17 @@ void MainComponent::initSlots()
 void MainComponent::initComponents()
 {
     // ── Top rail ─────────────────────────────────────────
+    // Brand wordmark ("360° BROADCAST" / "ATOMIC BUTTON") is painted directly
+    // in paint() for the two-tone look; keep the labels present but blank.
     addAndMakeVisible (titleLabel);
-    titleLabel.setFont (monoFont (13.0f, juce::Font::bold));
-    titleLabel.setColour (juce::Label::textColourId, juce::Colour (0xff264d87));
-    titleLabel.setText ("\xe2\x96\xa0 SHORTCUT PRO", juce::dontSendNotification);
+    titleLabel.setText ("", juce::dontSendNotification);
 
     addAndMakeVisible (subLabel);
-    subLabel.setFont (monoFont (8.0f));
-    subLabel.setColour (juce::Label::textColourId, juce::Colour (0xff617081));
-    subLabel.setText ("BROADCAST AUDIO EDITOR  \xc2\xb7  200-SLOT HOT KEY DECK", juce::dontSendNotification);
+    subLabel.setText ("", juce::dontSendNotification);
 
     addAndMakeVisible (clockLabel);
     clockLabel.setFont (monoFont (12.0f));
-    clockLabel.setColour (juce::Label::textColourId, juce::Colour (0xff617081));
+    clockLabel.setColour (juce::Label::textColourId, C::BRAND_DARK);
     clockLabel.setJustificationType (juce::Justification::right);
 
     addAndMakeVisible (timerLabel);
@@ -152,17 +179,18 @@ void MainComponent::initComponents()
     {
         addAndMakeVisible (btn);
         btn.setButtonText (txt);
+        btn.setLookAndFeel (&atomicLF);
         btn.setColour (juce::TextButton::buttonColourId,   C::BTN_FACE);
-        btn.setColour (juce::TextButton::buttonOnColourId, C::BTN_TOP);
+        btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff62b6ff)); // LCD ink accent
         btn.setColour (juce::TextButton::textColourOffId,  C::BTN_LABEL);
-        btn.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+        btn.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xff04140c));
         btn.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     };
 
     auto setupNavBtn = [&] (juce::TextButton& btn, const juce::String& txt)
     {
         setupBtn (btn, txt);
-        btn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2e4a62));
+        btn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff123f2e)); // nav green
     };
 
     // Soft keys below LCD (context-sensitive, labeled F1-F5)
@@ -206,7 +234,7 @@ void MainComponent::initComponents()
 
     // ENTER (wide, prominent)
     setupBtn (btnEnter, "ENTER");
-    btnEnter.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff334d66));
+    btnEnter.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff14503a));
 
     // Left panel bottom strip
     setupBtn (btnFollowOn, "FOLLOW ON");
@@ -222,23 +250,22 @@ void MainComponent::initComponents()
     setupBtn (btnRew,    "REW");
     setupBtn (btnFF,     "FF");
 
-    btnStop.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff3a2a2a));
-    btnPlay.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff2a5a2a));
-    btnRecord.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff5a1a1a));
-    btnRew.setColour    (juce::TextButton::buttonColourId, juce::Colour (0xff2e4a62));
-    btnFF.setColour     (juce::TextButton::buttonColourId, juce::Colour (0xff2e4a62));
+    btnStop.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff2a2320));
+    btnPlay.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff0f7a47));
+    btnRecord.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff7a1410));
+    btnRew.setColour    (juce::TextButton::buttonColourId, juce::Colour (0xff123f2e));
+    btnFF.setColour     (juce::TextButton::buttonColourId, juce::Colour (0xff123f2e));
 
     // ── Rotary knobs ──────────────────────────────────────
     auto setupKnob = [&] (juce::Slider& s)
     {
         addAndMakeVisible (s);
-        s.setSliderStyle (juce::Slider::Rotary);
+        s.setLookAndFeel (&atomicLF);
+        s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
         s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
         s.setRange (0.0, 1.0, 0.01);
         s.setValue (0.75, juce::dontSendNotification);
-        s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colour (0xff43b7ff));
-        s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colour (0xff1a2838));
-        s.setColour (juce::Slider::thumbColourId,               juce::Colour (0xffe8eef4));
+        s.onValueChange = [this] { repaint(); };   // refresh the -1.5/0/+1.5 readout
     };
     setupKnob (knobInputL);
     setupKnob (knobInputR);
@@ -774,10 +801,9 @@ void MainComponent::updateLCD()
 // ── Layout ────────────────────────────────────────────────
 void MainComponent::resized()
 {
-    auto available = getLocalBounds().reduced (14, 12);
-    const int deckW = juce::jmin (available.getWidth(),  1280);
-    const int deckH = juce::jmin (available.getHeight(), 870);
-    hardwareBounds = available.withSizeKeepingCentre (deckW, deckH);
+    // Deck fills the whole component (the window is sized to the deck's aspect),
+    // with a small uniform "room" margin. Edge-to-edge avoids fragile centring.
+    hardwareBounds = getLocalBounds().reduced (10);
 
     auto deck = hardwareBounds;
     topRailBounds  = deck.removeFromTop (42);
@@ -931,11 +957,12 @@ void MainComponent::resized()
         vuLeft.setBounds  (vuX,              meter.getY() + 18, vuBarW, vuH);
         vuRight.setBounds (vuX+vuBarW+vuGap, meter.getY() + 18, vuBarW, vuH);
         const int knobSz     = 42;
-        const int knobStartY = meter.getY() + 18 + vuH + 10;
+        const int knobPitch  = 62;   // room for label above + readout below
+        const int knobStartY = meter.getY() + 18 + vuH + 12;
         const int knobX      = meter.getCentreX() - knobSz / 2;
-        knobInputL.setBounds    (knobX, knobStartY,          knobSz, knobSz);
-        knobInputR.setBounds    (knobX, knobStartY + 52,     knobSz, knobSz);
-        knobHeadphones.setBounds(knobX, knobStartY + 52 * 2, knobSz, knobSz);
+        knobInputL.setBounds    (knobX, knobStartY,                 knobSz, knobSz);
+        knobInputR.setBounds    (knobX, knobStartY + knobPitch,     knobSz, knobSz);
+        knobHeadphones.setBounds(knobX, knobStartY + knobPitch * 2, knobSz, knobSz);
     }
 
     // ── Top rail ─────────────────────────────────────────
@@ -956,9 +983,15 @@ void MainComponent::paint (juce::Graphics& g)
     // Room background
     g.fillAll (C::ROOM);
 
-    // Chassis body — IR2 light gray
-    g.setColour (C::CHASSIS);
-    g.fillRoundedRectangle (hardwareBounds.toFloat(), 10.0f);
+    // Chassis body — Teal anodized vertical gradient
+    {
+        juce::ColourGradient cg (C::CHASSIS_HI, 0.0f, (float)hardwareBounds.getY(),
+                                 C::CHASSIS_C3, 0.0f, (float)hardwareBounds.getBottom(), false);
+        cg.addColour (0.08, C::CHASSIS_C1);
+        cg.addColour (0.60, C::CHASSIS_C2);
+        g.setGradientFill (cg);
+        g.fillRoundedRectangle (hardwareBounds.toFloat(), 10.0f);
+    }
 
     // Right panel (steel blue) covers right portion
     {
@@ -989,11 +1022,57 @@ void MainComponent::paint (juce::Graphics& g)
                             juce::Point<int> (hardwareBounds.getRight() - 12, hardwareBounds.getBottom() - 12) })
         g.fillEllipse ((float)p.x - 3.0f, (float)p.y - 3.0f, 6.0f, 6.0f);
 
-    // Top rail
-    g.setColour (C::RAIL);
-    g.fillRect  (topRailBounds);
-    g.setColour (C::CHASSIS_DRK);
-    g.fillRect  (topRailBounds.getX(), topRailBounds.getBottom() - 1, topRailBounds.getWidth(), 1);
+    // ── Top deck — brushed-metal strip with swoosh + brand ──
+    {
+        auto deck = topRailBounds.toFloat();
+        juce::ColourGradient dg (C::DECK_HI, 0.0f, deck.getY(),
+                                 C::DECK_LO, 0.0f, deck.getBottom(), false);
+        g.setGradientFill (dg);
+        g.fillRoundedRectangle (deck, 8.0f);
+
+        // faint horizontal brushed lines
+        g.setColour (juce::Colours::white.withAlpha (0.18f));
+        for (float yy = deck.getY() + 3.0f; yy < deck.getBottom() - 2.0f; yy += 3.0f)
+            g.fillRect (deck.getX() + 4.0f, yy, deck.getWidth() - 8.0f, 0.6f);
+
+        // swoosh — cubic ribbon across the lower third of the deck
+        {
+            const float L = deck.getX(), R = deck.getRight();
+            const float W = deck.getWidth();
+            const float base = deck.getBottom() - deck.getHeight() * 0.30f;
+            const float amp  = deck.getHeight() * 0.16f;
+            juce::Path sw;
+            sw.startNewSubPath (L, base);
+            sw.cubicTo (L + W * 0.22f, base - amp,  L + W * 0.38f, base + amp,   L + W * 0.56f, base - amp * 0.5f);
+            sw.cubicTo (L + W * 0.72f, base - amp*1.4f, L + W * 0.86f, base + amp*0.4f, R, base - amp);
+            sw.lineTo (R, deck.getBottom());
+            sw.lineTo (L, deck.getBottom());
+            sw.closeSubPath();
+            g.setColour (C::SWOOSH.withAlpha (0.92f));
+            g.fillPath (sw);
+            g.setColour (C::BRAND_BLUE.withAlpha (0.8f));
+            g.strokePath (sw, juce::PathStrokeType (2.0f));
+        }
+
+        // brand wordmark on the left of the deck
+        const int bx = topRailBounds.getX() + 16;
+        const int by = topRailBounds.getY() + 8;
+        g.setColour (C::BRAND_BLUE);
+        g.setFont (juce::Font (11.0f, juce::Font::bold));
+        g.drawText (juce::String::fromUTF8 ("360\xc2\xb0 BROADCAST"),
+                    bx, by, 320, 14, juce::Justification::topLeft, false);
+
+        juce::Font wordmark (30.0f, juce::Font::bold);
+        wordmark.setItalic (true);
+        g.setFont (wordmark);
+        const int wy = by + 13;
+        const juce::String a = "ATOMIC ";
+        const int aw = wordmark.getStringWidth (a);
+        g.setColour (C::BRAND_DARK);
+        g.drawText (a, bx, wy, aw + 4, 34, juce::Justification::topLeft, false);
+        g.setColour (C::SWOOSH);
+        g.drawText ("BUTTON", bx + aw, wy, 260, 34, juce::Justification::topLeft, false);
+    }
 
     // Status bar rail
     g.setColour (C::RAIL);
@@ -1045,19 +1124,44 @@ void MainComponent::paint (juce::Graphics& g)
                 meterColumnBounds.getX(), meterColumnBounds.getY() + 6,
                 meterColumnBounds.getWidth(), 12, juce::Justification::centred, false);
 
-    // Knob labels
+    // Knob labels + position scale (-1.5 / 0 / +1.5) + live readout
     {
-        auto meter2 = meterColumnBounds.reduced (6, 10);
-        const int knobSz2     = 42;
-        const int vuH2        = 170;
-        const int knobStartY2 = meter2.getY() + 18 + vuH2 + 10;
-        const int knobX2      = meter2.getCentreX() - knobSz2 / 2;
+        const int knobSz2    = 42;
+        const int knobPitch2 = 62;
+        const int knobX2     = knobInputL.getX();
+        const int knobY0     = knobInputL.getY();
+        const int colX       = meterColumnBounds.getX();
+        const int colW       = meterColumnBounds.getWidth();
+
+        struct KL { const char* name; juce::Slider* s; };
+        const KL rows[3] = { { "INPUT L", &knobInputL },
+                             { "INPUT R", &knobInputR },
+                             { "PHONES",  &knobHeadphones } };
+
+        for (int i = 0; i < 3; ++i)
+        {
+            const int ky = knobY0 + knobPitch2 * i;
+            // name above the knob
+            g.setColour (C::TEXT_DIM);
+            g.setFont (monoFont (7.0f));
+            g.drawText (rows[i].name, knobX2 - 6, ky - 10, knobSz2 + 12, 9,
+                        juce::Justification::centred, false);
+            // -1.5 / +1.5 ticks flanking the knob centre line
+            g.setColour (C::LCD_DIM);
+            g.setFont (monoFont (6.0f));
+            g.drawText ("-1.5", colX + 1, ky + knobSz2 / 2 - 4, 16, 8, juce::Justification::left,  false);
+            g.drawText ("+1.5", colX + colW - 17, ky + knobSz2 / 2 - 4, 16, 8, juce::Justification::right, false);
+            // live readout below the knob: value 0..1 -> -1.5..+1.5
+            const double pos = (rows[i].s->getValue() - 0.5) * 3.0;
+            juce::String txt = (pos >= 0 ? "+" : "") + juce::String (pos, 1);
+            g.setColour (C::LCD_TEXT);
+            g.setFont (monoFont (9.0f, juce::Font::bold));
+            g.drawText (txt, knobX2 - 6, ky + knobSz2 - 1, knobSz2 + 12, 11,
+                        juce::Justification::centred, false);
+        }
+        // VU labels
         g.setColour (C::TEXT_DIM);
         g.setFont (monoFont (7.0f));
-        g.drawText ("INPUT L", knobX2-4, knobStartY2 - 10,          knobSz2+8, 10, juce::Justification::centred, false);
-        g.drawText ("INPUT R", knobX2-4, knobStartY2 + 52 - 10,     knobSz2+8, 10, juce::Justification::centred, false);
-        g.drawText ("PHONES",  knobX2-4, knobStartY2 + 52*2 - 10,   knobSz2+8, 10, juce::Justification::centred, false);
-        // VU labels
         g.drawText ("L", vuLeft.getX(),  meterColumnBounds.getY() + 8, vuLeft.getWidth(),  12, juce::Justification::centred, false);
         g.drawText ("R", vuRight.getX(), meterColumnBounds.getY() + 8, vuRight.getWidth(), 12, juce::Justification::centred, false);
     }

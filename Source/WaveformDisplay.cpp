@@ -2,13 +2,14 @@
 
 namespace WFPalette
 {
-    static const juce::Colour LCD_BG    (0xff080f08);
-    static const juce::Colour GRID      (0xff0c240c);
-    static const juce::Colour WAVE_LIVE (0xff00cc44);
-    static const juce::Colour WAVE_TRIM (0xff004422);
-    static const juce::Colour TRIM_LINE (0xff00ff44);
-    static const juce::Colour EMPTY_TXT (0xff163a16);
-    static const juce::Colour PLAYHEAD  (0xff00ff44);
+    // Blue LCD theme (matches Atomic Button / IR3 design)
+    static const juce::Colour LCD_BG    (0xff02101a);
+    static const juce::Colour GRID      (0xff0c3346);
+    static const juce::Colour WAVE_LIVE (0xff62b6ff);
+    static const juce::Colour WAVE_TRIM (0xff1f4f7a);
+    static const juce::Colour TRIM_LINE (0xff8fd0ff);
+    static const juce::Colour EMPTY_TXT (0xff1f5f8a);
+    static const juce::Colour PLAYHEAD  (0xffaee0ff);
 }
 
 WaveformDisplay::WaveformDisplay()
@@ -86,7 +87,9 @@ void WaveformDisplay::paint (juce::Graphics& g)
     if (playheadFrac > 0.0)
     {
         const int px = (int)(playheadFrac * W);
-        g.setColour (WFPalette::PLAYHEAD.withAlpha (0.9f));
+        g.setColour (WFPalette::WAVE_LIVE.withAlpha (0.25f));
+        g.fillRect (px - 2, 0, 5, H);                       // glow
+        g.setColour (WFPalette::PLAYHEAD.withAlpha (0.95f));
         g.drawVerticalLine (px, 0.0f, (float)H);
         // Small triangle
         juce::Path tri;
