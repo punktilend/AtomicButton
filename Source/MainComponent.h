@@ -48,6 +48,10 @@ private:
     PlayMode playMode = PlayMode::FireStop;
     bool     loopAll  = false;
 
+    // ── Recording (arm + PLAY to roll) ────────────────────
+    int  recArmedKey  = -1;   // slot armed for recording
+    int  recArmedBank = -1;
+
     // ── UI Mode ───────────────────────────────────────────────
     enum class UIMode { Normal, BankSelect, AssignHotKey, HotList };
     UIMode currentMode  = UIMode::Normal;
@@ -124,6 +128,7 @@ private:
     void loadFileForKey (int keyIndex, const juce::File& file);
     void clearKey       (int keyIndex);
     void findSlot       ();
+    void finishRecording();   // commit captured audio into the armed slot
 
     void setStatus (const juce::String& msg);
 

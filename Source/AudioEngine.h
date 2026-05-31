@@ -33,6 +33,18 @@ public:
     bool isVoicePaused    (int bankIndex, int keyIndex) const;
     void seekVoice        (int bankIndex, int keyIndex, double deltaSeconds);
 
+    // ── Recording (arm + roll, in-memory capture) ────────
+    // Workflow: armRecord() -> beginRecording() (on PLAY) -> commitRecordingToSlot() (on STOP).
+    void armRecord();        // reset capture, enter Armed
+    void beginRecording();   // Armed -> Recording (starts capturing input)
+    void cancelRecord();     // abandon, back to Idle
+    bool isRecordArmed () const noexcept { return recState.load (std::memory_order_relaxed) == Armed; }
+    bool isRecording   () const noexcept { return recState.load (std::memory_order_relaxed) == Recording; }
+    double getRecordedSeconds () const noexcept;
+    // Copies captured audio into the slot (buffer/peaks/duration), returns to Idle.
+    // Returns false if nothing was captured.
+    bool commitRecordingToSlot (SoundSlot& slot);
+
     // ── Query ─────────────────────────────────────────────
     bool isVoiceActive (int bankIndex, int keyIndex) const;
     // Returns elapsed seconds for the (first) voice on this slot
@@ -66,6 +78,16 @@ private:
     std::atomic<float> vuLevel[2];
 
     double currentSampleRate = 44100.0;
+
+    // ── Recording state ───────────────────────────────────
+    // recBuffer is preallocated on audioDeviceAboutToStart so the audio thread
+    // never allocates. The audio thread is the sole writer of recWritePos.
+    enum RecState { Idle = 0, Armed, Recording };
+    std::atomic<int>     recState   { Idle };
+    std::atomic<int64_t> recWritePos { 0 };
+    juce::AudioBuffer<float> recBuffer;            // 2ch, capacity = recCapacity
+    int64_t recCapacity = 0;
+    static constexpr double maxRecordSeconds = 300.0;   // 5 min cap
 
     // Voices to end — queued from audio thread, fired on message thread
     struct EndedVoice { int bank; int key; };

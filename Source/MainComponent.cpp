@@ -253,6 +253,9 @@ void MainComponent::initComponents()
     btnStop.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff2a2320));
     btnPlay.setColour   (juce::TextButton::buttonColourId, juce::Colour (0xff0f7a47));
     btnRecord.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff7a1410));
+    btnRecord.setToggleable (true);
+    btnRecord.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffd11a10));
+    btnRecord.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
     btnRew.setColour    (juce::TextButton::buttonColourId, juce::Colour (0xff123f2e));
     btnFF.setColour     (juce::TextButton::buttonColourId, juce::Colour (0xff123f2e));
 
@@ -476,6 +479,11 @@ void MainComponent::bindCallbacks()
 
     // ── Transport ─────────────────────────────────────────
     btnStop.onClick = [this] {
+        if (engine.isRecording() || engine.isRecordArmed())
+        {
+            finishRecording();
+            return;
+        }
         if (hotListActive)
         {
             hotListActive = false;
@@ -487,6 +495,13 @@ void MainComponent::bindCallbacks()
             stopAll();
     };
     btnPlay.onClick = [this] {
+        if (engine.isRecordArmed())
+        {
+            engine.beginRecording();
+            setStatus ("RECORDING -- slot " + juce::String (recArmedKey + 1)
+                       + "  (STOP to finish)");
+            return;
+        }
         if (hotListActive)
         {
             // Manual step through hot list
@@ -506,7 +521,33 @@ void MainComponent::bindCallbacks()
         }
     };
     btnRecord.onClick = [this] {
-        setStatus ("REC -- connect audio input and press PLAY");
+        if (engine.isRecording())
+        {
+            // Pressing REC while rolling stops and commits.
+            finishRecording();
+        }
+        else if (engine.isRecordArmed())
+        {
+            // Disarm.
+            engine.cancelRecord();
+            recArmedKey = recArmedBank = -1;
+            btnRecord.setToggleState (false, juce::dontSendNotification);
+            setStatus ("REC -- disarmed");
+        }
+        else
+        {
+            if (selectedKey < 0)
+            {
+                setStatus ("REC -- select a key first");
+                return;
+            }
+            recArmedKey  = selectedKey;
+            recArmedBank = currentBank;
+            engine.armRecord();
+            btnRecord.setToggleState (true, juce::dontSendNotification);
+            setStatus ("REC ARMED -- press PLAY to record to slot "
+                       + juce::String (recArmedKey + 1) + ", STOP to finish");
+        }
     };
     btnRew.onClick = [this] {
         if (selectedKey >= 0) engine.seekVoice (currentBank, selectedKey, -5.0);
@@ -1378,6 +1419,40 @@ void MainComponent::clearKey (int ki)
         ? juce::String::charToString ((juce::juce_wchar)toupper(k))
         : juce::String (ki + 1);
     setStatus ("Slot " + juce::String (ki + 1) + " [" + kStr + "] cleared");
+}
+
+void MainComponent::finishRecording()
+{
+    if (recArmedBank < 0 || recArmedKey < 0)
+    {
+        engine.cancelRecord();
+        btnRecord.setToggleState (false, juce::dontSendNotification);
+        return;
+    }
+
+    const int bank = recArmedBank;
+    const int key  = recArmedKey;
+    const bool committed = engine.commitRecordingToSlot (banks[bank][key]);
+
+    recArmedKey = recArmedBank = -1;
+    btnRecord.setToggleState (false, juce::dontSendNotification);
+
+    if (committed)
+    {
+        auto& slot = banks[bank][key];
+        if (bank == currentBank)
+        {
+            keyboard.refreshKey (key);
+            selectKey (key);
+        }
+        updateLCD();
+        setStatus ("RECORDED -- " + juce::String (slot.duration, 1) + "s to bank "
+                   + bankName (bank) + " slot " + juce::String (key + 1));
+    }
+    else
+    {
+        setStatus ("REC -- nothing captured (check input device in MENU)");
+    }
 }
 
 void MainComponent::findSlot()
