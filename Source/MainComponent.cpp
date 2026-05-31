@@ -317,11 +317,9 @@ void MainComponent::bindCallbacks()
     keyboard.onFileDrop    = [this] (int ki, const juce::File& f) { loadFileForKey (ki, f); };
 
     // ── Soft keys ─────────────────────────────────────────
-    btnSoft[0].onClick = [this] { setStatus ("F1"); };
-    btnSoft[1].onClick = [this] { setStatus ("F2"); };
-    btnSoft[2].onClick = [this] { setStatus ("F3"); };
-    btnSoft[3].onClick = [this] { setStatus ("F4"); };
-    btnSoft[4].onClick = [this] { setStatus ("F5"); };
+    for (int i = 0; i < 5; ++i)
+        btnSoft[i].onClick = [this, i] { softKeyPressed (i); };
+    updateSoftKeys();
 
     // ── Navigation ─────────────────────────────────────────
     btnNavBack.onClick  = [this] {
@@ -578,6 +576,7 @@ void MainComponent::enterNormalMode()
     keyboard.setUIMode (0);
     setStatus ("READY");
     updateLCD();
+    updateSoftKeys();
 }
 
 void MainComponent::enterBankSelectMode()
@@ -587,6 +586,7 @@ void MainComponent::enterBankSelectMode()
     keyboard.setUIMode (1);
     setStatus ("BANK SEL -- press hot key 1-50 to select bank");
     updateLCD();
+    updateSoftKeys();
 }
 
 void MainComponent::enterAssignHotKeyMode()
@@ -596,6 +596,7 @@ void MainComponent::enterAssignHotKeyMode()
     keyboard.setUIMode (2);
     setStatus ("ASSIGN HOT KEY -- press a hot key to assign a clip");
     updateLCD();
+    updateSoftKeys();
 }
 
 void MainComponent::enterHotListMode()
@@ -608,6 +609,7 @@ void MainComponent::enterHotListMode()
     else
         setStatus ("HOT LIST -- " + juce::String ((int)hotList.size()) + " clips queued");
     updateLCD();
+    updateSoftKeys();
 }
 
 void MainComponent::addToHotList (int keyIndex)
@@ -631,6 +633,7 @@ void MainComponent::addToHotList (int keyIndex)
     }
     keyboard.setHotList (hotList);
     updateLCD();
+    updateSoftKeys();
 }
 
 void MainComponent::playNextInHotList()
@@ -1337,6 +1340,7 @@ void MainComponent::selectKey (int ki)
     lcdPosLabel.setText  ("> 0:00.0", juce::dontSendNotification);
     waveform.setSlot (slot.isLoaded() ? &slot : nullptr);
     updateLCD();
+    updateSoftKeys();   // EDIT/RENAME availability follows the selected slot
 }
 
 void MainComponent::switchBank (int b)
@@ -1452,6 +1456,128 @@ void MainComponent::finishRecording()
     else
     {
         setStatus ("REC -- nothing captured (check input device in MENU)");
+    }
+}
+
+void MainComponent::renameSlot (int ki)
+{
+    if (ki < 0) return;
+
+    auto* w = new juce::AlertWindow ("Rename slot " + juce::String (ki + 1),
+                                     "Enter new name:", juce::AlertWindow::NoIcon);
+    w->addTextEditor ("name", currentSlotForKey (ki).name);
+    w->addButton ("OK",     1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<juce::AlertWindow> safe (w);
+    w->enterModalState (true,
+        juce::ModalCallbackFunction::create ([this, ki, safe] (int r)
+        {
+            if (r == 1 && safe != nullptr)
+            {
+                const auto val = safe->getTextEditorContents ("name");
+                if (val.isNotEmpty())
+                    currentSlotForKey (ki).name = val.toUpperCase().substring (0, 14);
+            }
+            keyboard.refreshKey (ki);
+            if (ki == selectedKey) selectKey (ki);
+        }), true);
+}
+
+// ── Context soft keys (F1-F5) ─────────────────────────────
+void MainComponent::updateSoftKeys()
+{
+    auto set = [this] (int i, const juce::String& label, bool enabled)
+    {
+        btnSoft[i].setButtonText (label);
+        btnSoft[i].setEnabled (enabled);
+    };
+
+    switch (currentMode)
+    {
+        case UIMode::BankSelect:
+            set (0, "PREV", currentBank > 0);
+            set (1, "NEXT", currentBank < NUM_BANKS_TOTAL - 1);
+            set (2, "",     false);
+            set (3, "",     false);
+            set (4, "EXIT", true);
+            break;
+
+        case UIMode::AssignHotKey:
+            set (0, "",     false);
+            set (1, "",     false);
+            set (2, "",     false);
+            set (3, "",     false);
+            set (4, "EXIT", true);
+            break;
+
+        case UIMode::HotList:
+            set (0, "CLEAR", ! hotList.empty());
+            set (1, "",      false);
+            set (2, "",      false);
+            set (3, "",      false);
+            set (4, "EXIT",  true);
+            break;
+
+        case UIMode::Normal:
+        default:
+        {
+            const bool hasClip = (selectedKey >= 0 && currentSlotForKey (selectedKey).isLoaded());
+            set (0, "EDIT",   hasClip);
+            set (1, "RENAME", selectedKey >= 0);
+            set (2, "LOAD",   selectedKey >= 0);
+            set (3, "SAVE",   true);
+            set (4, "OPEN",   true);
+            break;
+        }
+    }
+}
+
+void MainComponent::softKeyPressed (int index)
+{
+    switch (currentMode)
+    {
+        case UIMode::BankSelect:
+            if      (index == 0 && currentBank > 0)                    switchBank (currentBank - 1);
+            else if (index == 1 && currentBank < NUM_BANKS_TOTAL - 1)  switchBank (currentBank + 1);
+            else if (index == 4)                                       enterNormalMode();
+            return;
+
+        case UIMode::AssignHotKey:
+            if (index == 4) enterNormalMode();
+            return;
+
+        case UIMode::HotList:
+            if (index == 0)
+            {
+                hotList.clear();
+                hotListActive = false;
+                hotListPos    = -1;
+                keyboard.setHotList (hotList);
+                setStatus ("HOT LIST -- cleared");
+                updateLCD();
+                updateSoftKeys();
+            }
+            else if (index == 4)
+            {
+                enterNormalMode();
+            }
+            return;
+
+        case UIMode::Normal:
+        default:
+            switch (index)
+            {
+                case 0:  if (selectedKey >= 0 && currentSlotForKey (selectedKey).isLoaded())
+                             openEditClip (selectedKey);
+                         break;
+                case 1:  if (selectedKey >= 0) renameSlot (selectedKey);          break;
+                case 2:  if (selectedKey >= 0) openFileChooserForKey (selectedKey); break;
+                case 3:  saveProject();                                            break;
+                case 4:  loadProject();                                            break;
+                default: break;
+            }
+            return;
     }
 }
 

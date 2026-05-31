@@ -129,6 +129,11 @@ private:
     void clearKey       (int keyIndex);
     void findSlot       ();
     void finishRecording();   // commit captured audio into the armed slot
+    void renameSlot     (int keyIndex);
+
+    // Context soft keys (F1-F5 below the LCD) — labels + actions change with mode.
+    void updateSoftKeys ();          // relabel/enable for the current mode + selection
+    void softKeyPressed (int index); // dispatch F1-F5 based on the current mode
 
     void setStatus (const juce::String& msg);
 
