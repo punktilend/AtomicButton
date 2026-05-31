@@ -19,8 +19,9 @@ AudioEngine::~AudioEngine()
 
 void AudioEngine::initialise()
 {
-    // Let JUCE pick the best default device (WASAPI on Windows, CoreAudio on Mac)
-    auto err = deviceManager.initialiseWithDefaultDevices (0, 2);
+    // Let JUCE pick the best default device (WASAPI on Windows, CoreAudio on Mac).
+    // Open 2 inputs as well so REC can capture from the default input.
+    auto err = deviceManager.initialiseWithDefaultDevices (2, 2);
     jassert (err.isEmpty());
     deviceManager.addAudioCallback (this);
 
@@ -86,6 +87,73 @@ bool AudioEngine::loadFile (SoundSlot& slot, const juce::File& file)
         slot.duration      = (double)numSamples / rdr->sampleRate;
         slot.sourceFile    = file;
         slot.waveformPeaks = std::move (peaks);
+    }
+
+    return true;
+}
+
+// ── Recording (message thread) ────────────────────────────
+void AudioEngine::armRecord()
+{
+    recWritePos.store (0, std::memory_order_relaxed);
+    recState.store (Armed, std::memory_order_relaxed);
+}
+
+void AudioEngine::beginRecording()
+{
+    if (recState.load (std::memory_order_relaxed) == Armed)
+        recState.store (Recording, std::memory_order_relaxed);
+}
+
+void AudioEngine::cancelRecord()
+{
+    recState.store (Idle, std::memory_order_relaxed);
+    recWritePos.store (0, std::memory_order_relaxed);
+}
+
+double AudioEngine::getRecordedSeconds() const noexcept
+{
+    return (double) recWritePos.load (std::memory_order_relaxed) / currentSampleRate;
+}
+
+bool AudioEngine::commitRecordingToSlot (SoundSlot& slot)
+{
+    // Stop capturing first, then read the settled write position.
+    recState.store (Idle, std::memory_order_relaxed);
+    const int64_t numSamples = recWritePos.load (std::memory_order_relaxed);
+    recWritePos.store (0, std::memory_order_relaxed);
+
+    if (numSamples <= 0)
+        return false;
+
+    auto buffer = std::make_shared<juce::AudioBuffer<float>> (2, (int) numSamples);
+    buffer->copyFrom (0, 0, recBuffer, 0, 0, (int) numSamples);
+    buffer->copyFrom (1, 0, recBuffer, 1, 0, (int) numSamples);
+
+    // Build waveform peaks (200 buckets) — mirrors loadFile().
+    const int buckets = 200;
+    std::vector<float> peaks (buckets);
+    const int blockSize = juce::jmax (1, (int) (numSamples / buckets));
+    const float* ch0 = buffer->getReadPointer (0);
+    for (int i = 0; i < buckets; ++i)
+    {
+        float maxVal = 0.0f;
+        const int start = i * blockSize;
+        const int end   = juce::jmin (start + blockSize, (int) numSamples);
+        for (int s = start; s < end; ++s)
+            maxVal = juce::jmax (maxVal, std::abs (ch0[s]));
+        peaks[i] = maxVal;
+    }
+
+    {
+        juce::ScopedLock sl (voiceLock);
+        slot.buffer        = std::move (buffer);
+        slot.sampleRate    = (int) currentSampleRate;
+        slot.duration      = (double) numSamples / currentSampleRate;
+        slot.sourceFile    = juce::File();   // in-memory recording, no source file
+        slot.waveformPeaks = std::move (peaks);
+        slot.trimIn        = 0.0f;
+        slot.trimOut       = 1.0f;
     }
 
     return true;
@@ -221,12 +289,37 @@ float AudioEngine::getVULevel (int channel) const
 
 // ── Audio callback (real-time thread) ─────────────────────
 void AudioEngine::audioDeviceIOCallbackWithContext (
-    const float* const*, int,
+    const float* const* inputChannelData,
+    int                 numInputChannels,
     float* const*       outputChannelData,
     int                 numOutputChannels,
     int                 numSamples,
     const juce::AudioIODeviceCallbackContext&)
 {
+    // ── Capture path (RT-safe: no locks, no allocation) ───
+    if (recState.load (std::memory_order_relaxed) == Recording && numInputChannels > 0)
+    {
+        const int64_t pos   = recWritePos.load (std::memory_order_relaxed);
+        const int64_t room  = recCapacity - pos;
+        const int     toRec = (int) juce::jlimit ((int64_t) 0, room, (int64_t) numSamples);
+
+        const float* inL = inputChannelData[0];
+        const float* inR = numInputChannels > 1 ? inputChannelData[1] : inputChannelData[0];
+
+        if (toRec > 0 && recBuffer.getNumSamples() > 0)
+        {
+            if (inL != nullptr) recBuffer.copyFrom (0, (int) pos, inL, toRec);
+            if (inR != nullptr) recBuffer.copyFrom (1, (int) pos, inR, toRec);
+            recWritePos.store (pos + toRec, std::memory_order_relaxed);
+
+            // Drive the VU meters off the input while recording so levels are visible.
+            float recPeak = 0.0f;
+            if (inL != nullptr) for (int i = 0; i < toRec; ++i) recPeak = juce::jmax (recPeak, std::abs (inL[i]));
+            vuLevel[0].store (juce::jmax (recPeak, vuLevel[0].load() * 0.92f), std::memory_order_relaxed);
+            vuLevel[1].store (juce::jmax (recPeak, vuLevel[1].load() * 0.92f), std::memory_order_relaxed);
+        }
+    }
+
     // Zero the output
     for (int ch = 0; ch < numOutputChannels; ++ch)
         if (outputChannelData[ch] != nullptr)
@@ -319,6 +412,12 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
 void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
     currentSampleRate = device->getCurrentSampleRate();
+
+    // Preallocate the capture buffer (stream isn't running yet, so this is safe).
+    recState.store (Idle, std::memory_order_relaxed);
+    recWritePos.store (0, std::memory_order_relaxed);
+    recCapacity = (int64_t) (maxRecordSeconds * currentSampleRate);
+    recBuffer.setSize (2, (int) recCapacity, false, true, true);
 }
 
 void AudioEngine::audioDeviceStopped()

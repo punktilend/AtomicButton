@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-//  SHORTCUT PRO — Weird Al Universe Edition
+//  SHORTCUT PRO — Broadcast Audio Editor
 //  Full-keyboard broadcast cart machine.
 //  47 trigger keys × 4 banks = 188 assignable slots.
 //  Modeled on the 360 Systems Shortcut workflow.
@@ -25,66 +25,66 @@ const KEY_DISPLAY = {
 function keyDisplay(k) { return KEY_DISPLAY[k] || k.toUpperCase(); }
 
 // ── PRESET NAMES (per bank, per key) ─────────────────────
-// Bank A: UHF film / VHS content
-// Bank B: Classic song hooks
-// Bank C: Deep cuts / Al TV / interview
-// Bank D: Specialty / rarities
+// Bank A: Imaging / opens / IDs
+// Bank B: Beds / hooks / promos
+// Bank C: Interview / actuality / production
+// Bank D: Specialty / utility / FX
 const PRESETS = {
   A: {
-    '`':'UHF STING',   '1':'NO STINK BADGR','2':'SUPPLIES!',   '3':'SPATULA CITY', '4':'CONAN LIBRARYN',
-    '5':'WHEEL O FISH', '6':'GANDHI II',     '7':'SPADOWSKI',   '8':'BEVERAGE CART','9':'YOU SO STUPID',
-    '0':'UHF THEME',   '-':'RAUL INTRO',    '=':'TOWN TALK',
-    'q':'QUICK CHANGE', 'w':'WILD KINGDOM',  'e':'EVEL K JR',   'r':"RAUL'S SHOW",  't':'TOOTHPICK TRK',
-    'y':'YODA IMPRSN',  'u':'UNCLE NUTSY',   'i':'I LUV PLACE', 'o':'ONE DOLLAR!',  'p':"PAULY'S DEBUT",
-    '[':'POOL TRICK',  ']':'PUPPET SHOW',
-    'a':"AL'S SPEECH",  's':'SPATULA PITCH', 'd':'DOROTHY SHOES','f':'FLYING GANDHI','g':'GANDHI TRLR',
-    'h':'HOTEL LOBBY',  'j':'JANITOR PALCE', 'k':'KIWI SLAM',   'l':'LARRY LAUNDRY',';':'SQUEAK FX',
-    "'":'BADGER QUOTE',
-    'z':'ZERO DOLLARS', 'x':'XMAS VHS',      'c':'COLONIC IRGTN','v':'VHS TRACKING', 'b':'BEV SMASH',
-    'n':'NOOGIE NUTSY', 'm':'MY SPLEEN!',    ',':'SLIGHT RETURN','.':'THATS ALL',    '/':'FADE OUT',
-    ' ':'BIG FIRE',
+    '`':'OPEN STING',  '1':'SHOW OPEN',    '2':'NEWS OPEN',   '3':'SPORTS OPEN',  '4':'WEATHER OPEN',
+    '5':'LEGAL ID',    '6':'TOP HOUR',     '7':'REJOIN',      '8':'COLD OPEN',    '9':'BREAK STING',
+    '0':'THEME HIT',   '-':'INTRO BED',    '=':'OUTRO TAG',
+    'q':'MORNING ID',  'w':'MIDDAY ID',    'e':'DRIVE ID',    'r':'NIGHT ID',     't':'WEEKEND ID',
+    'y':'LIVE READ',   'u':'STATION VOX',  'i':'QUICK DROP',  'o':'LINER ONE',    'p':'LINER TWO',
+    '[':'PROMO TAG',   ']':'CONTEST TAG',
+    'a':'NEWSER BED',  's':'SPORTS BED',   'd':'WX BED',      'f':'TRAFFIC BED',  'g':'TALK BED',
+    'h':'SPONSOR TAG', 'j':'CALLER UP',    'k':'PHONE BED',   'l':'CROWD LIFT',   ';':'CHEER HIT',
+    "'":'AUDIENCE FX',
+    'z':'BREAK ONE',   'x':'BREAK TWO',    'c':'BREAK THREE', 'v':'RESET SWEEP',  'b':'HOUR MARK',
+    'n':'BUMPER ONE',  'm':'BUMPER TWO',   ',':'END TAG',     '.':'FADE OUT',     '/':'HARD OUT',
+    ' ':'BIG FINISH',
   },
   B: {
-    '`':'ACCORDION RFF', '1':'EAT IT HOOK',  '2':'FAT HOOK',    '3':'AMISH PARADSE','4':'LIKE A SURGN',
-    '5':'WHITE&NERDY',  '6':'SMELLS NIRVNA', '7':'JURASSIC PRK','8':'BEDROCK ANTM', '9':'ALBUQUERQUE',
-    '0':'HARDWARE STOR','-':'POLKA PARTY',   '=':'DARE STUPID',
-    'q':'QUEEN SUEDE',  'w':'WORD CRIMES',   'e':'EAT IT VERSE', 'r':'RUN W SCISSRS','t':'TACKY HOOK',
-    'y':'YODA SONG',    'u':'UGLY GIRL',     'i':'ILL SUE YA',  'o':'ODE FAMILY',   'p':'PRFRM THIS WY',
-    '[':'POLKA FACE',  ']':'PRINCESS BRIDE',
-    'a':'ANOTHER RIDES','s':'SAGA BEGINS',   'd':'DONT DOWNLOAD','f':'FIRST WLD PRBS','g':'GENERIC BLUES',
-    'h':'HEADLINE NEWS','j':'JACKSON PARK',  'k':'KING OF SUEDE','l':'LASAGNA',      ';':'SRGN FX',
-    "'":'AL QUOTE',
-    'z':'ZERO HOUR',    'x':'X AMISH',       'c':'CNR HOOK',    'v':'VIRUS ALERT',  'b':'BOHEMIAN LIKE',
-    'n':'NATURE TRAIL', 'm':'MY BOLOGNA',    ',':'COMMA KARMA',  '.':'POINT BREAK',  '/':'JUST EAT IT',
-    ' ':'ACCORDION STAB',
+    '`':'HOOK ONE',     '1':'HOOK TWO',      '2':'HOOK THREE',  '3':'POWER INTRO',  '4':'PROMO OPEN',
+    '5':'ALT BED',      '6':'ROCK BED',      '7':'POP BED',     '8':'DANCE BED',    '9':'HIPHOP BED',
+    '0':'RHYTHM BED',   '-':'PUNCH BED',     '=':'COUNTDOWN',
+    'q':'FEATURE OPEN', 'w':'FEATURE TAG',   'e':'MIX HIT',     'r':'DROP FX',      't':'SWOOSH FX',
+    'y':'RAMP ONE',     'u':'RAMP TWO',      'i':'RAMP THREE',  'o':'MUSIC BED A',  'p':'MUSIC BED B',
+    '[':'PROMO ONE',    ']':'PROMO TWO',
+    'a':'TEASE ONE',    's':'TEASE TWO',     'd':'TEASE THREE', 'f':'COMEBACK',     'g':'POWER STAB',
+    'h':'HEADLINE BED', 'j':'UPDATE BED',    'k':'COUNTDOWN FX','l':'RISE FX',      ';':'HIT SWEEP',
+    "'":'VOICE DROP',
+    'z':'TOPICAL',      'x':'RETRO BED',     'c':'WEEKEND BED', 'v':'MIX SHOW',     'b':'PARTY BED',
+    'n':'NIGHT BED',    'm':'LATE BED',      ',':'COMEDOWN',    '.':'POINTER',      '/':'HARD TEASE',
+    ' ':'STAB FX',
   },
   C: {
-    '`':'RADIO CALL IN', '1':'AL TV MJ',     '2':'AL TV MADONNA','3':'AL TV DIRE ST','4':'AL TV COOLIO',
-    '5':'AL TV HAMMER',  '6':'AL TV NIRVANA','7':'AL TV LYNYRD', '8':'AL TV AEROSMTH','9':'AL TV VAN HLN',
-    '0':'AL TV MEATLOAF','-':'BEHIND SCENES','=':'VLOG INTRO',
-    'q':'QUESTION AL',  'w':'WENDY INTRVIEW','e':'EARLY KIDSHOW', 'r':'RUNNING GAGS', 't':'TOUR DIARY',
-    'y':'YEARBOOK PIC',  'u':'UNDER PRESSURE','i':'IN 3D SHOW',   'o':'OPEN CHEESE',  'p':'POODLE BONUS',
-    '[':'POLKA FACE BNS',']':'POLKA FACE 2',
-    'a':'AL FAN MAIL',  's':'SCOTTI BROS',   'd':'DIRECT HELL',  'f':'FAN LTR READ', 'g':'GRAMMY SPEECH',
-    'h':'HIT ME BABY',  'j':'JURASSIC FX',   'k':'KARAOKE SCENE','l':'LIVE KNOTTS',  ';':'SATURDAY NGT',
-    "'":'TOUR BLOOPER',
-    'z':'ZIP IT GOOD',  'x':'XYLOPHONE GAG', 'c':'CLOSE ENCOUNT','v':'VHS STATIC',   'b':'BONUS FEATURE',
-    'n':'NETWORK CLIP',  'm':'MY LIFE',       ',':'LITTLE MOMENT','.'  :'PERIOD CORCT', '/':'FLIP SIDE',
-    ' ':'CROWD NOISE',
+    '`':'CALLER ONE',   '1':'CALLER TWO',    '2':'CALLER THREE','3':'VOX POP ONE',  '4':'VOX POP TWO',
+    '5':'ACTUALITY A',  '6':'ACTUALITY B',   '7':'ACTUALITY C', '8':'INTERVIEW A',  '9':'INTERVIEW B',
+    '0':'INTERVIEW C',  '-':'BEHIND SCENE',  '=':'FIELD OPEN',
+    'q':'QUESTION ONE', 'w':'QUESTION TWO',  'e':'ANSWER ONE',  'r':'ANSWER TWO',   't':'REMOTE BED',
+    'y':'PKG INTRO',    'u':'PKG OUT',       'i':'NEWS ACT',    'o':'CLIP ONE',     'p':'CLIP TWO',
+    '[':'CLIP THREE',   ']':'CLIP FOUR',
+    'a':'MAILBAG',      's':'TAPE ROLL',     'd':'LONGFORM',    'f':'FEATURE PKG',  'g':'AWARD CLIP',
+    'h':'PHONE HOOK',   'j':'ROOM TONE',     'k':'SCENE SET',   'l':'LIVE SHOT',    ';':'SAT NAT',
+    "'":'BLOOPER',
+    'z':'ZIPPER',       'x':'XYLO FX',       'c':'WHOOSH',      'v':'TAPE HISS',    'b':'BONUS CUT',
+    'n':'NETWORK FEED', 'm':'LIFE BED',      ',':'MOMENT',      '.':'PERIODIC',     '/':'FLIPPER',
+    ' ':'CROWD FX',
   },
   D: {
-    '`':'WEASEL STOMP',  '1':'FOIL INTRO',   '2':'TACKY VERSE',  '3':'MISSION STMT', '4':'SPORTS SONG',
-    '5':'EBAY HOOK',     '6':'VIRUS FX',     '7':'CNR VERSE',    '8':'WORD CRIMES V','9':'1ST WLD PRBS',
-    '0':'JACKSON PARK E','-':'RINGTONE PRD', '=':'VELVET ELVIS',
-    'q':'QUEEN SUEDE V', 'w':'WEASEL STOMP V','e':'EVERYTHING U', 'r':'RICKY HOOK',   't':'TRPD DRV-THRU',
-    'y':'U DONT LOVE ME','u':'UNDEF HERO',   'i':'STILL BILL',   'o':'OPEN MIC NGT', 'p':'PARTY GROUND',
-    '[':'LAME CLAIM FAME',']':'JUST A JOKE',
-    'a':'AMISH PARDSE V','s':'SMELLS VERSE',  'd':'DONT WR WHITE','f':'FRANK 2000 TV', 'g':'GENIUS FRANCE',
-    'h':'HANDY HOOK',    'j':'JACKSON ALT',   'k':'KILLIN TIME',  'l':'SURGN LIVE',   ';':'SPORTS REF',
-    "'":'OTHER DEEP CUT',
-    'z':'ZELDA POLKA',  'x':'XMAS AT GRND',  'c':'CAVITY SEARCH','v':'VELVET VERSE', 'b':'BOB DYLAN STL',
-    'n':'NATURE TRAIL V','m':'MIDNIGHT STAR', ',':'AL MINUTE',    '.':'ALBUQ END',    '/':'HARDWARE F',
-    ' ':'ACCORDION CHRD',
+    '`':'COMEDY HIT',    '1':'PRANK OPEN',    '2':'PRANK BED',   '3':'MISSION OPEN', '4':'SPORTS FX',
+    '5':'SALE TAG',      '6':'ALARM FX',      '7':'CLUB BED',    '8':'GLITCH FX',    '9':'ODDBALL',
+    '0':'PARKER',        '-':'RINGTONE',      '=':'NOVELTY',
+    'q':'VARIATION A',   'w':'VARIATION B',   'e':'UTILITY ONE', 'r':'UTILITY TWO',  't':'DRIVETHRU',
+    'y':'HEARTBED',      'u':'HERO BED',      'i':'STILLER',     'o':'OPEN MIC',     'p':'PARTY FX',
+    '[':'CLAIM GAME',    ']':'JOKE TAG',
+    'a':'VARIANT C',     's':'VERSE BED',     'd':'WHITE NOISE', 'f':'RETRO TV',     'g':'GAME SHOW',
+    'h':'HAND TOOL',     'j':'ALT TAKE',      'k':'KILL TIME',   'l':'LIVE BED',     ';':'SPORT REF',
+    "'":'DEEP CUT',
+    'z':'ARCADE FX',     'x':'HOLIDAY',       'c':'SEARCH FX',   'v':'VELVET BED',   'b':'FOLK BED',
+    'n':'TRAILER',       'm':'MIDNIGHT',      ',':'ONE MINUTE',  '.':'ENDING',       '/':'HARDWARE',
+    ' ':'CHORD HIT',
   },
 };
 

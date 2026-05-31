@@ -4,13 +4,13 @@
 class ShortcutProApplication : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName()    override { return "Shortcut Pro"; }
+    const juce::String getApplicationName()    override { return "Atomic Button"; }
     const juce::String getApplicationVersion() override { return "1.0.0"; }
-    bool moreThanOneInstanceAllowed()          override { return true; }
+    bool moreThanOneInstanceAllowed()          override { return false; }
 
     void initialise (const juce::String&) override
     {
-        mainWindow.reset (new MainWindow ("Shortcut Pro  —  Broadcast Audio Editor",
+        mainWindow.reset (new MainWindow ("Atomic Button  -  Broadcast Audio Editor",
                                           new MainComponent(),
                                           *this));
     }
@@ -30,10 +30,17 @@ public:
               owner (app)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (c, true);
+            setContentOwned (c, false);
             setResizable (true, true);
-            setResizeLimits (1100, 820, 1800, 1280);
-            centreWithSize (1280, 900);
+            setResizeLimits (900, 600, 3840, 2160);
+
+            // Size to the actual usable display area (logical units) so the
+            // deck always fits regardless of monitor size / DPI scaling.
+            auto ua = juce::Desktop::getInstance().getDisplays()
+                          .getPrimaryDisplay()->userArea;
+            const int w = juce::jmin (1480, (int) (ua.getWidth()  * 0.94f));
+            const int h = juce::jmin (1010, (int) (ua.getHeight() * 0.94f));
+            centreWithSize (w, h);
             setVisible (true);
         }
 

@@ -5,6 +5,7 @@
 #include "KeyboardComponent.h"
 #include "VUMeterComponent.h"
 #include "WaveformDisplay.h"
+#include "AtomicLookAndFeel.h"
 #include <array>
 #include <optional>
 #include <set>
@@ -30,6 +31,9 @@ public:
     void timerCallback() override;
 
 private:
+    // ── Look and feel ────────────────────────────────────
+    AtomicLookAndFeel atomicLF;
+
     // ── Audio ────────────────────────────────────────────
     AudioEngine engine;
 
@@ -43,6 +47,10 @@ private:
     enum class PlayMode { FireStop, Loop };
     PlayMode playMode = PlayMode::FireStop;
     bool     loopAll  = false;
+
+    // ── Recording (arm + PLAY to roll) ────────────────────
+    int  recArmedKey  = -1;   // slot armed for recording
+    int  recArmedBank = -1;
 
     // ── UI Mode ───────────────────────────────────────────────
     enum class UIMode { Normal, BankSelect, AssignHotKey, HotList };
@@ -120,6 +128,12 @@ private:
     void loadFileForKey (int keyIndex, const juce::File& file);
     void clearKey       (int keyIndex);
     void findSlot       ();
+    void finishRecording();   // commit captured audio into the armed slot
+    void renameSlot     (int keyIndex);
+
+    // Context soft keys (F1-F5 below the LCD) — labels + actions change with mode.
+    void updateSoftKeys ();          // relabel/enable for the current mode + selection
+    void softKeyPressed (int index); // dispatch F1-F5 based on the current mode
 
     void setStatus (const juce::String& msg);
 

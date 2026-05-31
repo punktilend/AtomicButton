@@ -16,10 +16,10 @@ FetchContent_MakeAvailable(JUCE)
 
 # ── App target ───────────────────────────────────────────
 juce_add_gui_app(AtomicButton
-    PRODUCT_NAME        "Shortcut Pro"
+    PRODUCT_NAME        "Atomic Button"
     VERSION             "1.0.0"
     COMPANY_NAME        "AtomicButton"
-    BUNDLE_ID           "com.atomicbutton.shortcutpro"
+    BUNDLE_ID           "com.atomicbutton.atomicbutton"
     ICON_BIG            ""
 )
 
@@ -35,6 +35,7 @@ target_include_directories(AtomicButton PRIVATE
 target_sources(AtomicButton PRIVATE
     Source/Main.cpp
     Source/AudioEngine.cpp
+    Source/EditClipComponent.cpp
     Source/KeyboardComponent.cpp
     Source/VUMeterComponent.cpp
     Source/WaveformDisplay.cpp
